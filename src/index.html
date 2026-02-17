@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent7</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <span class="logo-icon">🤖</span>
+          <span class="logo-text">Agent7</span>
+        </div>
+        <div class="autonomous-toggle">
+          <label class="switch">
+            <input type="checkbox" id="autonomous-mode">
+            <span class="slider"></span>
+          </label>
+          <span class="toggle-label">Auto</span>
+        </div>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-view="chat">
+          <span class="nav-icon">💬</span>
+          <span>Chat</span>
+        </button>
+        <button class="nav-item" data-view="agents">
+          <span class="nav-icon">👥</span>
+          <span>Agents</span>
+          <span class="badge" id="agent-count">0</span>
+        </button>
+        <button class="nav-item" data-view="workflows">
+          <span class="nav-icon">⚡</span>
+          <span>Workflows</span>
+        </button>
+        <button class="nav-item" data-view="memory">
+          <span class="nav-icon">🧠</span>
+          <span>Memory</span>
+        </button>
+        <button class="nav-item" data-view="browser">
+          <span class="nav-icon">🌐</span>
+          <span>Browser</span>
+        </button>
+        <button class="nav-item" data-view="files">
+          <span class="nav-icon">📁</span>
+          <span>Files</span>
+        </button>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <button class="nav-item" data-view="settings">
+          <span class="nav-icon">⚙️</span>
+          <span>Settings</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Chat View -->
+      <div class="view active" id="chat-view">
+        <div class="chat-container">
+          <div class="chat-header">
+            <h2>Agent7 Assistant</h2>
+            <div class="header-actions">
+              <button class="btn-icon" id="clear-chat" title="Clear Chat">🗑️</button>
+              <button class="btn-icon" id="export-chat" title="Export">📥</button>
+            </div>
+          </div>
+          
+          <div class="chat-messages" id="chat-messages">
+            <div class="message system">
+              <div class="message-content">
+                <p>Welcome to <strong>Agent7</strong> - Your Advanced AI Agent</p>
+                <p class="hint">I can help you with complex tasks using multiple specialized agents. Try asking me to:</p>
+                <ul class="hints">
+                  <li>Research and summarize a topic</li>
+                  <li>Automate browser tasks</li>
+                  <li>Write and execute code</li>
+                  <li>Manage files and workflows</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          <div class="chat-input-container">
+            <div class="input-toolbar">
+              <button class="toolbar-btn" id="attach-file" title="Attach File">📎</button>
+              <button class="toolbar-btn" id="screenshot" title="Screenshot">📸</button>
+              <button class="toolbar-btn" id="voice-input" title="Voice Input">🎤</button>
+              <div class="toolbar-divider"></div>
+              <button class="toolbar-btn" id="agent-selector" title="Select Agent">👤</button>
+            </div>
+            <div class="input-wrapper">
+              <textarea 
+                id="chat-input" 
+                placeholder="Type a message or task... (Cmd+Enter to send)"
+                rows="1"
+              ></textarea>
+              <button class="send-btn" id="send-message">
+                <span>➤</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Task Panel -->
+        <div class="task-panel" id="task-panel">
+          <div class="panel-header">
+            <h3>Active Tasks</h3>
+            <button class="btn-icon" id="collapse-panel">−</button>
+          </div>
+          <div class="task-list" id="task-list">
+            <!-- Tasks will be added here dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Agents View -->
+      <div class="view" id="agents-view">
+        <div class="view-header">
+          <h2>Specialized Agents</h2>
+          <button class="btn-primary" id="create-agent">+ Create Agent</button>
+        </div>
+        <div class="agents-grid" id="agents-grid">
+          <!-- Agents will be populated here -->
+        </div>
+      </div>
+
+      <!-- Workflows View -->
+      <div class="view" id="workflows-view">
+        <div class="view-header">
+          <h2>Workflow Automation</h2>
+          <button class="btn-primary" id="create-workflow">+ Create Workflow</button>
+        </div>
+        <div class="workflows-list" id="workflows-list">
+          <!-- Workflows will be listed here -->
+        </div>
+      </div>
+
+      <!-- Memory View -->
+      <div class="view" id="memory-view">
+        <div class="view-header">
+          <h2>Memory & Context</h2>
+          <div class="search-box">
+            <input type="text" id="memory-search" placeholder="Search memory...">
+            <button class="btn-icon">🔍</button>
+          </div>
+        </div>
+        <div class="memory-container">
+          <div class="memory-section">
+            <h3>Conversations</h3>
+            <div class="memory-list" id="conversations-list"></div>
+          </div>
+          <div class="memory-section">
+            <h3>Tasks</h3>
+            <div class="memory-list" id="tasks-list"></div>
+          </div>
+          <div class="memory-section">
+            <h3>Knowledge Base</h3>
+            <div class="memory-list" id="knowledge-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Browser View -->
+      <div class="view" id="browser-view">
+        <div class="browser-container">
+          <div class="browser-toolbar">
+            <div class="browser-nav">
+              <button class="btn-icon" id="browser-back">←</button>
+              <button class="btn-icon" id="browser-forward">→</button>
+              <button class="btn-icon" id="browser-refresh">↻</button>
+            </div>
+            <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL...">
+            <div class="browser-actions">
+              <button class="btn-secondary" id="browser-automate">🤖 Automate</button>
+              <button class="btn-secondary" id="browser-screenshot">📸 Screenshot</button>
+            </div>
+          </div>
+          <div class="browser-content">
+            <div class="browser-webview" id="browser-webview">
+              <div class="placeholder">
+                <p>Enter a URL to start browsing</p>
+                <p class="hint">Or use the chat to automate browser tasks</p>
+              </div>
+            </div>
+            <div class="browser-panel" id="browser-panel">
+              <h3>Browser Tools</h3>
+              <div class="tool-grid">
+                <button class="tool-btn" data-tool="navigate">🌐 Navigate</button>
+                <button class="tool-btn" data-tool="click">👆 Click</button>
+                <button class="tool-btn" data-tool="type">⌨️ Type</button>
+                <button class="tool-btn" data-tool="extract">📄 Extract</button>
+                <button class="tool-btn" data-tool="screenshot">📸 Screenshot</button>
+                <button class="tool-btn" data-tool="scroll">📜 Scroll</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Files View -->
+      <div class="view" id="files-view">
+        <div class="view-header">
+          <h2>File Manager</h2>
+          <div class="file-actions">
+            <button class="btn-secondary" id="select-folder">📁 Select Folder</button>
+            <button class="btn-secondary" id="new-file">📝 New File</button>
+          </div>
+        </div>
+        <div class="files-container">
+          <div class="file-tree" id="file-tree">
+            <div class="placeholder">Select a folder to browse files</div>
+          </div>
+          <div class="file-preview" id="file-preview">
+            <div class="placeholder">Select a file to preview</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings View -->
+      <div class="view" id="settings-view">
+        <div class="view-header">
+          <h2>Settings</h2>
+        </div>
+        <div class="settings-container">
+          <div class="settings-section">
+            <h3>API Keys</h3>
+            <div class="setting-item">
+              <label>OpenAI API Key</label>
+              <input type="password" id="api-key-openai" placeholder="sk-...">
+            </div>
+            <div class="setting-item">
+              <label>Anthropic API Key</label>
+              <input type="password" id="api-key-anthropic" placeholder="sk-...">
+            </div>
+            <div class="setting-item">
+              <label>Google API Key</label>
+              <input type="password" id="api-key-google" placeholder="...">
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>Models</h3>
+            <div class="setting-item">
+              <label>Chat Model</label>
+              <select id="chat-model">
+                <option value="gpt-4">GPT-4</option>
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="claude-3-opus">Claude 3 Opus</option>
+                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label>Agent Model</label>
+              <select id="agent-model">
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="settings-section">
+            <h3>System</h3>
+            <div class="setting-item">
+              <label>Auto-start</label>
+              <input type="checkbox" id="setting-autostart">
+            </div>
+            <div class="setting-item">
+              <label>Menu Bar Icon</label>
+              <input type="checkbox" id="setting-menubar" checked>
+            </div>
+            <div class="setting-item">
+              <label>Notifications</label>
+              <input type="checkbox" id="setting-notifications" checked>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modals -->
+  <div class="modal" id="agent-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Agent</h3>
+        <button class="btn-icon close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Agent Name</label>
+          <input type="text" id="agent-name" placeholder="e.g., Research Assistant">
+        </div>
+        <div class="form-group">
+          <label>Agent Type</label>
+          <select id="agent-type">
+            <option value="general">General Purpose</option>
+            <option value="research">Research</option>
+            <option value="coding">Coding</option>
+            <option value="browser">Browser</option>
+            <option value="file">File Manager</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="agent-description" rows="3" placeholder="What can this agent do?"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary close-modal">Cancel</button>
+        <button class="btn-primary" id="save-agent">Create Agent</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="workflow-modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create Workflow</h3>
+        <button class="btn-icon close-modal">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Workflow Name</label>
+          <input type="text" id="workflow-name" placeholder="e.g., Morning Report">
+        </div>
+        <div class="form-group">
+          <label>Trigger</label>
+          <select id="workflow-trigger">
+            <option value="manual">Manual</option>
+            <option value="schedule">Scheduled</option>
+            <option value="event">Event-based</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary close-modal">Cancel</button>
+        <button class="btn-primary" id="save-workflow">Create Workflow</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

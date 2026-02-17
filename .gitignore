@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.Python
+*.so
+.pytest_cache/
+.mypy_cache/
+
+# Build outputs
+dist/
+build/
+*.dmg
+*.zip
+*.app
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Python
+venv/
+env/
+.venv/
+eggs/
+.eggs/
+*.egg-info/
+
+# Electron
+out/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+*.temp

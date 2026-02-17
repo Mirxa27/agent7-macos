@@ -1,0 +1,90 @@
+{
+  "name": "agent7-macos",
+  "version": "2.0.0",
+  "description": "Agent7 - Advanced Agentic AI for macOS",
+  "main": "src/main.js",
+  "author": "abdullah mirxa",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "NODE_ENV=development electron .",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:mac:publish": "electron-builder --mac --publish always",
+    "dist": "npm run build:mac",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "build": {
+    "appId": "com.mirxa.agent7",
+    "productName": "Agent7",
+    "copyright": "Copyright © 2026 Abdullah Mirxa",
+    "directories": {
+      "output": "dist",
+      "buildResources": "assets"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "python-backend/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "icon": "assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "assets/entitlements.plist",
+      "entitlementsInherit": "assets/entitlements.plist"
+    },
+    "dmg": {
+      "sign": false,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Mirxa27",
+      "repo": "agent7-macos",
+      "releaseType": "release"
+    }
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "electron-store": "^8.1.0",
+    "node-notifier": "^10.0.1",
+    "electron-log": "^5.0.0",
+    "uuid": "^9.0.0",
+    "chrono-node": "^2.7.0",
+    "fastest-levenshtein": "^1.0.16"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-notarize": "^1.2.2"
+  }
+}
