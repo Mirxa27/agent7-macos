@@ -83,8 +83,8 @@
     "fastest-levenshtein": "^1.0.16"
   },
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
+    "electron": "^35.7.5",
+    "electron-builder": "^26.7.0",
     "electron-notarize": "^1.2.2"
   }
 }
