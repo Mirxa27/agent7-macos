@@ -3,7 +3,9 @@ const path = require('path');
 const { spawn } = require('child_process');
 const Store = require('electron-store');
 const log = require('electron-log');
-const { autoUpdater } = require('electron-updater');
+
+// Auto-updater disabled for now - will be added later
+const autoUpdater = null;
 
 // Initialize store for persistence
 const store = new Store();
@@ -388,8 +390,10 @@ async function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
     
-    // Check for updates
-    autoUpdater.checkForUpdatesAndNotify();
+    // Check for updates if autoUpdater is available
+    if (autoUpdater) {
+      autoUpdater.checkForUpdatesAndNotify();
+    }
   });
 
   // Handle closed
@@ -569,25 +573,31 @@ app.on('will-quit', () => {
   globalShortcut.unregisterAll();
 });
 
-// Auto-updater events
-autoUpdater.on('update-available', () => {
-  dialog.showMessageBox(mainWindow, {
-    type: 'info',
-    title: 'Update Available',
-    message: 'A new version of Agent7 is available. It will be downloaded in the background.',
-    buttons: ['OK']
-  });
-});
-
-autoUpdater.on('update-downloaded', () => {
-  dialog.showMessageBox(mainWindow, {
-    type: 'info',
-    title: 'Update Ready',
-    message: 'Update downloaded. The application will restart to apply the update.',
-    buttons: ['Restart', 'Later']
-  }).then((result) => {
-    if (result.response === 0) {
-      autoUpdater.quitAndInstall();
+// Auto-updater events (only if available)
+if (autoUpdater) {
+  autoUpdater.on('update-available', () => {
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Available',
+        message: 'A new version of Agent7 is available. It will be downloaded in the background.',
+        buttons: ['OK']
+      });
     }
   });
-});
+
+  autoUpdater.on('update-downloaded', () => {
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Ready',
+        message: 'Update downloaded. The application will restart to apply the update.',
+        buttons: ['Restart', 'Later']
+      }).then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    }
+  });
+}
