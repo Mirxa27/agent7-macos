@@ -20,6 +20,13 @@ const state = {
   apiKeys: {},
   currentTask: null,
   agents: [],
+  agentDashboard: {
+    viewMode: 'grid',          // 'grid' | 'flow'
+    selectedAgent: null,       // currently selected agent name
+    detailPanelOpen: false,
+    orchestration: null,       // current orchestration event data
+    taskHistory: {}            // keyed by agent name -> array of recent tasks
+  },
   conversations: [],
   browserUrl: '',
   isExecuting: false,
@@ -43,7 +50,11 @@ const state = {
   memory: {
     conversations: [],
     tasks: [],
-    knowledge: []
+    knowledge: [],
+    searchResults: [],
+    activeFilter: 'all',
+    searchTimer: null,
+    isSearching: false
   }
 };
 
@@ -706,6 +717,28 @@ function handleOrchestrationProgress(event) {
 
   // Render step-by-step progress in the task panel
   renderOrchestrationSteps(event);
+
+  // Store orchestration data for the agents flow view
+  state.agentDashboard.orchestration = event;
+  if (state.agentDashboard.viewMode === 'flow') {
+    renderFlowView();
+  }
+
+  // Record task history for the agent involved
+  if (agent && (status === 'completed' || status === 'done' || status === 'failed')) {
+    if (!state.agentDashboard.taskHistory[agent]) {
+      state.agentDashboard.taskHistory[agent] = [];
+    }
+    state.agentDashboard.taskHistory[agent].push({
+      name: description || `Step ${step}`,
+      outcome: (status === 'failed') ? 'failed' : 'success',
+      time: Date.now()
+    });
+    // Keep only last 50 entries per agent
+    if (state.agentDashboard.taskHistory[agent].length > 50) {
+      state.agentDashboard.taskHistory[agent] = state.agentDashboard.taskHistory[agent].slice(-50);
+    }
+  }
 }
 
 /**
@@ -2014,46 +2047,353 @@ function showMemoryDetail(id) {
 }
 
 // ============================================
-// Agents
+// Agents Dashboard
 // ============================================
+
+/** Map agent type to emoji icon */
+const AGENT_TYPE_ICONS = {
+  planner: '\uD83D\uDCCB',        // clipboard
+  researcher: '\uD83D\uDD0D',     // magnifying glass
+  executor: '\u26A1',             // lightning
+  coder: '\uD83D\uDCBB',          // laptop
+  browser: '\uD83C\uDF10',        // globe
+  file_manager: '\uD83D\uDCC1',   // folder
+  reviewer: '\u2705',             // check mark
+  // Fallback aliases
+  coding: '\uD83D\uDCBB',
+  research: '\uD83D\uDD0D',
+  file: '\uD83D\uDCC1'
+};
+
+function getAgentIcon(agent) {
+  if (agent.icon) return agent.icon;
+  return AGENT_TYPE_ICONS[agent.type] || '\uD83E\uDD16';
+}
+
+/** Default agents shown when no dynamic agents are loaded */
+const DEFAULT_AGENTS = [
+  { name: 'Planner', type: 'planner', status: 'idle', desc: 'Plans multi-step task strategies', tasksCompleted: 12, successRate: 92 },
+  { name: 'Researcher', type: 'researcher', status: 'idle', desc: 'Gathers and analyzes information', tasksCompleted: 34, successRate: 88 },
+  { name: 'Executor', type: 'executor', status: 'idle', desc: 'Runs shell commands and scripts', tasksCompleted: 27, successRate: 85 },
+  { name: 'Coder', type: 'coder', status: 'idle', desc: 'Writes and reviews code', tasksCompleted: 45, successRate: 91 },
+  { name: 'Browser Agent', type: 'browser', status: 'idle', desc: 'Automates web browsing tasks', tasksCompleted: 19, successRate: 79 },
+  { name: 'File Manager', type: 'file_manager', status: 'idle', desc: 'Manages file operations', tasksCompleted: 22, successRate: 95 },
+  { name: 'Reviewer', type: 'reviewer', status: 'idle', desc: 'Reviews outputs and validates results', tasksCompleted: 16, successRate: 94 }
+];
+
 async function loadAgents() {
   try {
     const agents = await ipcRenderer.invoke('agent:list');
     state.agents = agents || [];
-    renderAgents();
   } catch (e) {
     console.error('Failed to load agents:', e);
   }
+  renderAgents();
+  setupAgentsDashboardListeners();
+}
+
+function getAllAgents() {
+  // Merge defaults with dynamic agents (dynamic ones override by name)
+  const dynamicNames = new Set(state.agents.map(a => a.name));
+  const merged = [...DEFAULT_AGENTS.filter(d => !dynamicNames.has(d.name)), ...state.agents];
+  return merged;
 }
 
 function renderAgents() {
   const grid = document.getElementById('agents-grid');
   if (!grid) return;
 
-  const defaultAgents = [
-    { name: 'Browser Agent', type: 'browser', status: 'ready', icon: '\uD83C\uDF10', desc: 'Automates web browsing tasks' },
-    { name: 'Code Agent', type: 'coding', status: 'ready', icon: '\uD83D\uDCBB', desc: 'Writes and executes code' },
-    { name: 'Research Agent', type: 'research', status: 'ready', icon: '\uD83D\uDD0D', desc: 'Gathers and analyzes information' },
-    { name: 'File Agent', type: 'file', status: 'ready', icon: '\uD83D\uDCC1', desc: 'Manages file operations' }
-  ];
+  const allAgents = getAllAgents();
 
-  const allAgents = [...defaultAgents, ...state.agents];
+  grid.innerHTML = allAgents.map(agent => {
+    const icon = getAgentIcon(agent);
+    const statusClass = agent.status || 'idle';
+    const statusLabel = statusClass.charAt(0).toUpperCase() + statusClass.slice(1);
+    const tasks = agent.tasksCompleted || 0;
+    const rate = agent.successRate != null ? agent.successRate : 0;
+    const selected = state.agentDashboard.selectedAgent === agent.name ? ' selected' : '';
 
-  grid.innerHTML = allAgents.map(agent => `
-    <div class="agent-card" data-agent="${agent.name}">
-      <div class="agent-header">
-        <div class="agent-avatar">${agent.icon || '\uD83E\uDD16'}</div>
-        <div class="agent-info">
-          <h4>${agent.name}</h4>
-          <span>${agent.type}</span>
+    return `
+      <div class="agent-card${selected}" data-agent="${agent.name}">
+        <div class="agent-card-header">
+          <div class="agent-card-icon">${icon}</div>
+          <div class="agent-card-info">
+            <div class="agent-card-name">${agent.name}</div>
+            <div class="agent-card-type">${agent.type}</div>
+          </div>
         </div>
-      </div>
-      <p class="agent-desc">${agent.desc || 'Specialized AI agent'}</p>
-      <div class="agent-status ${agent.status}">
-        ${agent.status === 'ready' ? '\u25CF Ready' : '\u25CB Busy'}
-      </div>
-    </div>
-  `).join('');
+        <div class="agent-card-stats">
+          <div class="agent-stat">
+            <span class="agent-stat-value">${tasks}</span>
+            <span class="agent-stat-label">Tasks</span>
+          </div>
+          <div class="agent-stat">
+            <span class="agent-stat-value">${rate}%</span>
+            <span class="agent-stat-label">Success</span>
+          </div>
+        </div>
+        <div class="agent-card-footer">
+          <div class="agent-status-badge status-${statusClass}">
+            <span class="status-indicator"></span>
+            ${statusLabel}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Update sidebar badge
+  const badge = document.getElementById('agent-count');
+  if (badge) badge.textContent = allAgents.length;
+
+  // Bind click handlers on cards
+  grid.querySelectorAll('.agent-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const agentName = card.dataset.agent;
+      openAgentDetail(agentName);
+    });
+  });
+}
+
+/** Set up listeners for Grid/Flow toggle and detail panel close */
+function setupAgentsDashboardListeners() {
+  // View toggle (Grid / Flow)
+  const toggle = document.getElementById('agents-view-toggle');
+  if (toggle && !toggle._bound) {
+    toggle._bound = true;
+    toggle.addEventListener('click', (e) => {
+      const btn = e.target.closest('.toggle-btn');
+      if (!btn) return;
+      const mode = btn.dataset.agentsView;
+      if (!mode) return;
+      state.agentDashboard.viewMode = mode;
+      toggle.querySelectorAll('.toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+
+      const grid = document.getElementById('agents-grid');
+      const flow = document.getElementById('agents-flow-view');
+      if (grid) grid.classList.toggle('hidden', mode !== 'grid');
+      if (flow) flow.classList.toggle('active', mode === 'flow');
+
+      if (mode === 'flow') renderFlowView();
+    });
+  }
+
+  // Detail panel close
+  const closeBtn = document.getElementById('agent-detail-close');
+  if (closeBtn && !closeBtn._bound) {
+    closeBtn._bound = true;
+    closeBtn.addEventListener('click', closeAgentDetail);
+  }
+
+  const overlay = document.getElementById('agent-detail-overlay');
+  if (overlay && !overlay._bound) {
+    overlay._bound = true;
+    overlay.addEventListener('click', closeAgentDetail);
+  }
+
+  // Assign task button
+  const assignBtn = document.getElementById('assign-task-btn');
+  if (assignBtn && !assignBtn._bound) {
+    assignBtn._bound = true;
+    assignBtn.addEventListener('click', assignTaskToAgent);
+  }
+
+  // Assign task input enter key
+  const assignInput = document.getElementById('assign-task-input');
+  if (assignInput && !assignInput._bound) {
+    assignInput._bound = true;
+    assignInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') assignTaskToAgent();
+    });
+  }
+}
+
+// --- Agent Detail Panel ---
+
+function openAgentDetail(agentName) {
+  const allAgents = getAllAgents();
+  const agent = allAgents.find(a => a.name === agentName);
+  if (!agent) return;
+
+  state.agentDashboard.selectedAgent = agentName;
+  state.agentDashboard.detailPanelOpen = true;
+
+  // Update card selection
+  document.querySelectorAll('#agents-grid .agent-card').forEach(card => {
+    card.classList.toggle('selected', card.dataset.agent === agentName);
+  });
+
+  // Fill detail panel
+  const icon = getAgentIcon(agent);
+  const statusClass = agent.status || 'idle';
+
+  document.getElementById('detail-agent-icon').textContent = icon;
+  document.getElementById('detail-agent-name').textContent = agent.name;
+  document.getElementById('detail-agent-type').textContent = agent.type;
+
+  const liveDot = document.getElementById('detail-live-dot');
+  liveDot.className = 'live-dot ' + statusClass;
+
+  document.getElementById('detail-status-label').textContent = statusClass;
+  document.getElementById('detail-tasks-completed').textContent = agent.tasksCompleted || 0;
+  document.getElementById('detail-success-rate').textContent = (agent.successRate != null ? agent.successRate : 0) + '%';
+
+  // Render task history
+  renderDetailTaskHistory(agentName);
+
+  // Clear assign input
+  const assignInput = document.getElementById('assign-task-input');
+  if (assignInput) assignInput.value = '';
+
+  // Slide panel open
+  const panel = document.getElementById('agent-detail-panel');
+  const detailOverlay = document.getElementById('agent-detail-overlay');
+  if (panel) panel.classList.add('open');
+  if (detailOverlay) detailOverlay.classList.add('visible');
+}
+
+function closeAgentDetail() {
+  state.agentDashboard.selectedAgent = null;
+  state.agentDashboard.detailPanelOpen = false;
+
+  const panel = document.getElementById('agent-detail-panel');
+  const detailOverlay = document.getElementById('agent-detail-overlay');
+  if (panel) panel.classList.remove('open');
+  if (detailOverlay) detailOverlay.classList.remove('visible');
+
+  document.querySelectorAll('#agents-grid .agent-card').forEach(card => {
+    card.classList.remove('selected');
+  });
+}
+
+function renderDetailTaskHistory(agentName) {
+  const historyContainer = document.getElementById('detail-task-history');
+  if (!historyContainer) return;
+
+  const history = state.agentDashboard.taskHistory[agentName] || [];
+
+  if (history.length === 0) {
+    historyContainer.innerHTML = '<div class="task-history-empty">No task history yet</div>';
+    return;
+  }
+
+  // Show last 10 entries
+  const recent = history.slice(-10).reverse();
+  historyContainer.innerHTML = recent.map(entry => {
+    const outcomeClass = entry.outcome || 'success';
+    const outcomeLabel = outcomeClass.charAt(0).toUpperCase() + outcomeClass.slice(1);
+    const timeStr = entry.time ? formatTime(entry.time) : '';
+    return `
+      <div class="task-history-item">
+        <span class="task-history-name">${entry.name || 'Task'}</span>
+        <span class="task-history-outcome ${outcomeClass}">${outcomeLabel}</span>
+        <span class="task-history-time">${timeStr}</span>
+      </div>`;
+  }).join('');
+}
+
+/** Manually assign a task to the selected agent via wsManager */
+function assignTaskToAgent() {
+  const input = document.getElementById('assign-task-input');
+  if (!input) return;
+  const taskText = input.value.trim();
+  if (!taskText) return;
+
+  const agentName = state.agentDashboard.selectedAgent;
+  if (!agentName) return;
+
+  // Send to backend via wsManager
+  wsManager.send('assign_task', {
+    agent: agentName,
+    task: taskText
+  }).then(() => {
+    showToast(`Task assigned to ${agentName}`, 'success');
+
+    // Record in local history
+    if (!state.agentDashboard.taskHistory[agentName]) {
+      state.agentDashboard.taskHistory[agentName] = [];
+    }
+    state.agentDashboard.taskHistory[agentName].push({
+      name: taskText,
+      outcome: 'running',
+      time: Date.now()
+    });
+    renderDetailTaskHistory(agentName);
+  }).catch(err => {
+    console.error('Failed to assign task:', err);
+    showToast('Failed to assign task', 'error');
+  });
+
+  input.value = '';
+}
+
+// --- Orchestration Flow View ---
+
+function renderFlowView() {
+  const flowView = document.getElementById('agents-flow-view');
+  if (!flowView) return;
+
+  const event = state.agentDashboard.orchestration;
+  const emptyState = document.getElementById('flow-empty-state');
+  const pipeline = document.getElementById('flow-pipeline');
+
+  if (!event || !event.total) {
+    if (emptyState) emptyState.style.display = '';
+    if (pipeline) pipeline.style.display = 'none';
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+  if (pipeline) pipeline.style.display = '';
+
+  const { step, total, agent, description, status, steps: stepDetails } = event;
+
+  let html = '';
+
+  // Flow header
+  const summaryText = status === 'completed'
+    ? `All ${total} steps completed`
+    : `Step ${step} of ${total} ${status === 'failed' ? '(failed)' : 'in progress'}`;
+  html += `<div class="flow-header"><h3>Orchestration Pipeline</h3><p>${summaryText}</p></div>`;
+
+  for (let i = 1; i <= total; i++) {
+    let stepStatus = 'pending';
+    let indicatorContent = i;
+    let stepAgent = '';
+    let stepDesc = `Step ${i}`;
+
+    if (i < step || (i === step && (status === 'completed' || status === 'done'))) {
+      stepStatus = 'completed';
+      indicatorContent = '\u2713';
+    } else if (i === step && status === 'executing') {
+      stepStatus = 'executing';
+    } else if (i === step && status === 'failed') {
+      stepStatus = 'failed';
+      indicatorContent = '\u2717';
+    }
+
+    if (i === step) {
+      stepAgent = agent || '';
+      stepDesc = description || stepDesc;
+    }
+    if (stepDetails && stepDetails[i - 1]) {
+      stepAgent = stepDetails[i - 1].agent || stepAgent;
+      stepDesc = stepDetails[i - 1].description || stepDesc;
+    }
+
+    const statusLabel = stepStatus.charAt(0).toUpperCase() + stepStatus.slice(1);
+
+    html += `
+      <div class="flow-step step-${stepStatus}">
+        <div class="flow-step-indicator">${indicatorContent}</div>
+        <div class="flow-step-content">
+          <div class="flow-step-desc">${stepDesc}</div>
+          ${stepAgent ? `<div class="flow-step-agent">${getAgentIcon({ type: '' })} ${stepAgent}</div>` : ''}
+          <div class="flow-step-status-label">${statusLabel}</div>
+        </div>
+      </div>`;
+  }
+
+  pipeline.innerHTML = html;
 }
 
 // ============================================
@@ -2185,43 +2525,25 @@ function handleScreenshot(base64Image) {
 
 function updateAgentsList(agents) {
   state.agents = agents;
+  renderAgents();
 
-  const grid = document.getElementById('agents-grid');
-  if (!grid) return;
-
-  grid.innerHTML = agents.map(agent => `
-    <div class="agent-card">
-      <div class="agent-header">
-        <div class="agent-avatar">${agent.icon || '\uD83E\uDD16'}</div>
-        <div class="agent-info">
-          <h4>${agent.name}</h4>
-          <span>${agent.type}</span>
-        </div>
-      </div>
-      <div class="agent-status ${agent.status}">
-        ${agent.status === 'ready' ? '\u25CF Ready' : '\u25CB Busy'}
-      </div>
-    </div>
-  `).join('');
-
-  // Update badge
-  const badge = document.getElementById('agent-count');
-  if (badge) {
-    badge.textContent = agents.length;
+  // If flow view is active, update it too
+  if (state.agentDashboard.viewMode === 'flow') {
+    renderFlowView();
   }
 }
 
 function saveAgent() {
-  const name = document.getElementById('agent-name').value;
-  const type = document.getElementById('agent-type').value;
-  const description = document.getElementById('agent-description').value;
+  const name = document.getElementById('agent-name')?.value;
+  const type = document.getElementById('agent-type')?.value;
+  const description = document.getElementById('agent-description')?.value;
 
   if (!name) {
     showError('Agent name is required');
     return;
   }
 
-  state.agents.push({ name, type, description, status: 'ready' });
+  state.agents.push({ name, type, description, status: 'idle', tasksCompleted: 0, successRate: 0 });
   updateAgentsList(state.agents);
   closeModal('agent-modal');
   showToast(`${name} has been created successfully`, 'success');

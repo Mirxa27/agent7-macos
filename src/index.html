@@ -8,7 +8,10 @@
   <link rel="stylesheet" href="styles/layout.css">
   <link rel="stylesheet" href="styles/components.css">
   <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/agents.css">
   <link rel="stylesheet" href="styles/browser.css">
+  <link rel="stylesheet" href="styles/files.css">
+  <link rel="stylesheet" href="styles/memory.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github-dark.min.css">
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
@@ -150,6 +153,78 @@
             <div class="empty-state">
               <span class="empty-icon">📋</span>
               <p>No active tasks</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agents View -->
+      <div class="view" id="agents-view">
+        <div class="view-header">
+          <div class="header-title">
+            <h2>Agents</h2>
+            <p class="header-subtitle" id="agents-subtitle">Manage and monitor your AI agents</p>
+          </div>
+          <div class="header-actions">
+            <div class="agents-view-toggle" id="agents-view-toggle">
+              <button class="toggle-btn active" data-agents-view="grid">Grid</button>
+              <button class="toggle-btn" data-agents-view="flow">Flow</button>
+            </div>
+          </div>
+        </div>
+        <div class="agents-body">
+          <!-- Card Grid (default) -->
+          <div class="agents-grid" id="agents-grid"></div>
+          <!-- Orchestration Flow View -->
+          <div class="agents-flow-view" id="agents-flow-view">
+            <div class="flow-empty-state" id="flow-empty-state">
+              <span class="flow-empty-icon">&#9881;</span>
+              <p>No orchestration running</p>
+              <p class="flow-empty-hint">Start a multi-step task from the chat to see the pipeline here.</p>
+            </div>
+            <div class="flow-pipeline" id="flow-pipeline" style="display:none;"></div>
+          </div>
+        </div>
+        <!-- Detail Panel (slide-in) -->
+        <div class="agent-detail-overlay" id="agent-detail-overlay"></div>
+        <div class="agent-detail-panel" id="agent-detail-panel">
+          <div class="agent-detail-header">
+            <div class="agent-detail-title">
+              <div class="agent-card-icon" id="detail-agent-icon"></div>
+              <div class="agent-detail-title-text">
+                <h3 id="detail-agent-name">Agent</h3>
+                <span class="agent-detail-type" id="detail-agent-type">type</span>
+              </div>
+            </div>
+            <button class="agent-detail-close" id="agent-detail-close" title="Close">&times;</button>
+          </div>
+          <div class="agent-detail-body">
+            <div class="agent-detail-status-row">
+              <span class="live-dot" id="detail-live-dot"></span>
+              <span class="agent-detail-status-label" id="detail-status-label">idle</span>
+            </div>
+            <div class="agent-detail-stats">
+              <div class="detail-stat-card">
+                <div class="detail-stat-value" id="detail-tasks-completed">0</div>
+                <div class="detail-stat-label">Tasks Done</div>
+              </div>
+              <div class="detail-stat-card">
+                <div class="detail-stat-value" id="detail-success-rate">0%</div>
+                <div class="detail-stat-label">Success Rate</div>
+              </div>
+            </div>
+            <div class="agent-task-history">
+              <div class="agent-detail-section-title">Recent Tasks</div>
+              <div class="task-history-list" id="detail-task-history">
+                <div class="task-history-empty">No task history yet</div>
+              </div>
+            </div>
+            <div class="agent-assign-task">
+              <div class="agent-detail-section-title">Assign Task</div>
+              <div class="assign-task-row">
+                <input type="text" class="assign-task-input" id="assign-task-input" placeholder="Describe a task...">
+                <button class="assign-task-btn" id="assign-task-btn">Assign</button>
+              </div>
             </div>
           </div>
         </div>
@@ -309,7 +384,7 @@
             <button class="btn-primary" id="new-file">📝 New File</button>
           </div>
         </div>
-        <div class="files-container">
+        <div class="files-container" id="files-container">
           <div class="files-sidebar">
             <div class="file-favorites">
               <h4>Favorites</h4>
@@ -317,16 +392,18 @@
               <div class="favorite-item" data-path="~/Documents">📄 Documents</div>
               <div class="favorite-item" data-path="~/Downloads">⬇️ Downloads</div>
               <div class="favorite-item" data-path="~/Desktop">🖥️ Desktop</div>
+              <div class="favorite-item" data-path="~/Projects">📦 Projects</div>
             </div>
           </div>
           <div class="files-main">
             <div class="files-toolbar">
-              <div class="breadcrumb" id="breadcrumb"><span>Home</span></div>
+              <div class="breadcrumb" id="breadcrumb"><span class="breadcrumb-item">Home</span></div>
             </div>
             <div class="file-tree" id="file-tree">
               <div class="empty-state">
                 <span class="empty-icon">📁</span>
                 <p>No folder selected</p>
+                <p class="empty-hint">Click "Open Folder" or choose a favorite</p>
               </div>
             </div>
           </div>
@@ -335,6 +412,43 @@
               <span class="empty-icon">👁️</span>
               <p>Select a file to preview</p>
             </div>
+          </div>
+          <!-- Drag-and-drop overlay -->
+          <div class="files-drop-overlay" id="files-drop-overlay">
+            <div class="files-drop-overlay-content">
+              <div class="drop-icon">📥</div>
+              <div class="drop-text">Drop files here</div>
+              <div class="drop-hint">Files will be added to the current folder</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Explorer View -->
+      <div class="view" id="memory-view">
+        <div class="view-header">
+          <h2>Memory Explorer</h2>
+          <p class="header-subtitle">Search through agent memory and past experiences</p>
+        </div>
+        <div class="memory-search-container">
+          <div class="memory-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="memory-search-input" placeholder="Search memories...">
+            <div class="search-loading" id="search-loading" style="display:none;">
+              <div class="loading-spinner small"></div>
+            </div>
+          </div>
+          <div class="memory-filters">
+            <button class="filter-chip active" data-filter="all">All</button>
+            <button class="filter-chip" data-filter="success">✓ Success</button>
+            <button class="filter-chip" data-filter="failed">✗ Failed</button>
+          </div>
+        </div>
+        <div class="memory-results" id="memory-results">
+          <div class="empty-state">
+            <span class="empty-icon">🧠</span>
+            <p>Search your agent's memory</p>
+            <p class="empty-hint">Try searching for past tasks or topics</p>
           </div>
         </div>
       </div>
