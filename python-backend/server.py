@@ -22,7 +22,10 @@ from browser_use.agent.views import ActionResult
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_aws import ChatBedrockConverse
+try:
+    from langchain_aws import ChatBedrockConverse
+except ImportError:
+    ChatBedrockConverse = None
 import cv2
 import numpy as np
 from PIL import Image
@@ -164,6 +167,11 @@ class AutonomousAgent:
                 temperature=0.3,
             )
         elif provider == "bedrock" and self.api_keys.get("bedrock"):
+            if ChatBedrockConverse is None:
+                raise ValueError(
+                    "langchain-aws package is required for Bedrock provider. "
+                    "Install it with: pip install langchain-aws"
+                )
             bedrock_config = self.api_keys["bedrock"]
             model_id = bedrock_config.get(
                 "model_id", "anthropic.claude-3-5-sonnet-20241022-v2:0"
