@@ -1,0 +1,617 @@
+/* ==========================================================================
+   Browser View — Tabs, Toolbar, Webview, Automation Panel, Inline Forms
+   ========================================================================== */
+
+/* --- Container --- */
+.browser-view-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   Tabs
+   ========================================================================== */
+.browser-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px 0;
+  gap: 4px;
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  max-width: 200px;
+  min-width: 120px;
+  border: 1px solid transparent;
+  border-bottom: none;
+  transition: background var(--transition-fast);
+  user-select: none;
+}
+
+.tab:hover {
+  background: var(--bg-primary);
+}
+
+.tab.active {
+  background: var(--bg-primary);
+  border-color: var(--border);
+}
+
+.tab-favicon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-favicon img {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-close {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transition: var(--transition-fast);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tab:hover .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.new-tab-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: var(--transition-fast);
+}
+
+.new-tab-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Toolbar
+   ========================================================================== */
+.browser-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.browser-nav {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.browser-nav .btn-icon {
+  transition: opacity var(--transition-fast), background var(--transition-fast);
+}
+
+.browser-nav .btn-icon[disabled],
+.browser-nav .btn-icon.disabled {
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+.browser-address-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  transition: border-color var(--transition-fast);
+}
+
+.browser-address-bar:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0,122,255,0.1);
+}
+
+.security-icon {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.security-icon.secure {
+  color: var(--success);
+}
+
+.security-icon.insecure {
+  color: var(--warning);
+}
+
+.browser-url {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  outline: none;
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.browser-url::placeholder {
+  color: var(--text-tertiary);
+}
+
+.browser-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+/* ==========================================================================
+   Webview Container
+   ========================================================================== */
+.webview-container {
+  flex: 1;
+  position: relative;
+  background: white;
+  min-height: 0;
+}
+
+webview {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* --- Loading Overlay --- */
+.browser-loading {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-md);
+  color: var(--text-secondary);
+  background: rgba(var(--bg-primary-rgb, 30, 30, 30), 0.85);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.browser-loading .loading-spinner {
+  width: 36px;
+  height: 36px;
+}
+
+/* --- Loading bar at top of webview (thin progress line) --- */
+.browser-loading-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary), #5E5CE6);
+  z-index: 6;
+  transition: width 0.3s ease;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ==========================================================================
+   Bottom Panel (Automation / Console / Elements)
+   ========================================================================== */
+.browser-panel {
+  height: 260px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.browser-panel.collapsed {
+  height: 36px;
+  overflow: hidden;
+}
+
+.panel-tabs {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-md);
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.panel-tab {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+}
+
+.panel-tab:hover {
+  background: var(--bg-tertiary);
+}
+
+.panel-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.panel-toggle-btn {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+}
+
+.panel-toggle-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.panel-content {
+  flex: 1;
+  overflow: auto;
+  padding: var(--spacing-md);
+}
+
+.panel-section {
+  display: none;
+}
+
+.panel-section.active {
+  display: block;
+}
+
+/* ==========================================================================
+   Automation Tools Grid
+   ========================================================================== */
+.automation-tools {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-md);
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 12px;
+  transition: var(--transition-fast);
+  color: var(--text-primary);
+}
+
+.tool-btn:hover {
+  border-color: var(--primary);
+  background: rgba(0,122,255,0.05);
+}
+
+.tool-btn.active {
+  border-color: var(--primary);
+  background: rgba(0,122,255,0.1);
+  box-shadow: 0 0 0 2px rgba(0,122,255,0.15);
+}
+
+.tool-btn span:first-child {
+  font-size: 20px;
+}
+
+/* ==========================================================================
+   Inline Automation Forms
+   ========================================================================== */
+.automation-form {
+  display: none;
+  padding: var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-top: var(--spacing-sm);
+}
+
+.automation-form.active {
+  display: block;
+  animation: fadeIn 0.2s ease;
+}
+
+.automation-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.automation-form-header h5 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.automation-form-close {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.automation-form-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.automation-form .form-row {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-sm);
+  align-items: center;
+}
+
+.automation-form .form-row:last-child {
+  margin-bottom: 0;
+}
+
+.automation-form input[type="text"],
+.automation-form textarea {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: 'SF Mono', Monaco, monospace;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.automation-form input[type="text"]:focus,
+.automation-form textarea:focus {
+  border-color: var(--primary);
+}
+
+.automation-form input[type="text"]::placeholder,
+.automation-form textarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+.automation-form textarea {
+  min-height: 60px;
+  resize: vertical;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.automation-form .form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.automation-form-btn {
+  padding: 8px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.automation-form-btn:hover {
+  background: var(--primary-hover);
+}
+
+.automation-form-btn:active {
+  transform: scale(0.97);
+}
+
+.automation-form-btn.secondary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.automation-form-btn.secondary:hover {
+  background: var(--border);
+}
+
+/* --- Extract results area --- */
+.extract-results {
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-family: 'SF Mono', Monaco, monospace;
+  color: var(--text-primary);
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: none;
+}
+
+.extract-results.has-content {
+  display: block;
+}
+
+/* --- Auto Task status --- */
+.auto-task-status {
+  margin-top: var(--spacing-sm);
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: none;
+}
+
+.auto-task-status.active {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.auto-task-status .loading-spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+/* ==========================================================================
+   Console Panel
+   ========================================================================== */
+.console-output {
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.console-entry {
+  padding: 2px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.console-entry.log {
+  color: var(--text-primary);
+}
+
+.console-entry.warn {
+  color: var(--warning);
+}
+
+.console-entry.error {
+  color: var(--danger);
+}
+
+.console-entry .console-timestamp {
+  color: var(--text-tertiary);
+  margin-right: var(--spacing-sm);
+}
+
+/* ==========================================================================
+   Elements Panel (placeholder)
+   ========================================================================== */
+.elements-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+  font-size: 13px;
+  gap: var(--spacing-sm);
+}
+
+/* ==========================================================================
+   Animations
+   ========================================================================== */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 768px) {
+  .automation-tools {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .browser-panel {
+    height: 220px;
+  }
+
+  .tab {
+    min-width: 80px;
+    padding: 6px 10px;
+  }
+}

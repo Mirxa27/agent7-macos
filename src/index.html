@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="styles/base.css">
   <link rel="stylesheet" href="styles/layout.css">
   <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/browser.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github-dark.min.css">
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
@@ -116,10 +118,18 @@
           </div>
           
           <div class="chat-input-container">
+            <input type="file" class="hidden-file-input" id="file-input" multiple>
             <div class="input-toolbar">
               <button class="toolbar-btn" id="attach-file" title="Attach File">📎</button>
               <button class="toolbar-btn" id="screenshot" title="Screenshot">📸</button>
               <button class="toolbar-btn" id="mention-agent" title="Mention Agent">@</button>
+              <span class="toolbar-divider"></span>
+              <select class="model-selector" id="model-selector" title="Select Model">
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="bedrock-claude">Bedrock Claude</option>
+              </select>
             </div>
             <div class="input-wrapper">
               <textarea id="chat-input" placeholder="Type a message or task... (Cmd+Enter to send)" rows="1"></textarea>
@@ -156,49 +166,129 @@
             </div>
             <button class="new-tab-btn" id="new-tab">+</button>
           </div>
-          
+
           <div class="browser-toolbar">
             <div class="browser-nav">
-              <button class="btn-icon" id="browser-back">←</button>
-              <button class="btn-icon" id="browser-forward">→</button>
-              <button class="btn-icon" id="browser-refresh">↻</button>
-              <button class="btn-icon" id="browser-home">🏠</button>
+              <button class="btn-icon" id="browser-back" title="Back">←</button>
+              <button class="btn-icon" id="browser-forward" title="Forward">→</button>
+              <button class="btn-icon" id="browser-refresh" title="Reload">↻</button>
+              <button class="btn-icon" id="browser-home" title="Home">🏠</button>
             </div>
             <div class="browser-address-bar">
               <span class="security-icon" id="security-icon">🔒</span>
               <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL or search...">
-              <button class="btn-icon" id="browser-bookmark">⭐</button>
+              <button class="btn-icon" id="browser-go" title="Go">➜</button>
             </div>
             <div class="browser-actions">
-              <button class="btn-icon" id="browser-screenshot">📸</button>
-              <button class="btn-icon" id="browser-automate">🤖</button>
+              <button class="btn-icon" id="browser-screenshot" title="Take Screenshot">📸</button>
+              <button class="btn-icon" id="browser-automate" title="Toggle Automation Panel">🤖</button>
             </div>
           </div>
-          
+
           <div class="webview-container" id="webview-container">
+            <div class="browser-loading-bar" id="browser-loading-bar" style="width: 0%;"></div>
             <webview id="browser-webview" src="about:blank" autosize="on" allowpopups></webview>
             <div class="browser-loading" id="browser-loading" style="display: none;">
               <div class="loading-spinner"></div>
               <span>Loading...</span>
             </div>
           </div>
-          
+
           <div class="browser-panel" id="browser-panel">
             <div class="panel-tabs">
               <button class="panel-tab active" data-panel="automation">Automation</button>
               <button class="panel-tab" data-panel="console">Console</button>
               <button class="panel-tab" data-panel="elements">Elements</button>
+              <button class="panel-toggle-btn" id="panel-toggle" title="Toggle Panel">▾</button>
             </div>
             <div class="panel-content">
+              <!-- Automation Panel -->
               <div class="panel-section active" id="automation-panel">
-                <h4>Automation Tools</h4>
                 <div class="automation-tools">
                   <button class="tool-btn" data-action="click"><span>👆</span> Click</button>
                   <button class="tool-btn" data-action="type"><span>⌨️</span> Type</button>
                   <button class="tool-btn" data-action="extract"><span>📄</span> Extract</button>
                   <button class="tool-btn" data-action="scroll"><span>📜</span> Scroll</button>
                   <button class="tool-btn" data-action="screenshot"><span>📸</span> Screenshot</button>
-                  <button class="tool-btn" data-action="wait"><span>⏱️</span> Wait</button>
+                  <button class="tool-btn" data-action="auto-task"><span>🤖</span> Auto Task</button>
+                </div>
+
+                <!-- Click Tool Form -->
+                <div class="automation-form" id="form-click">
+                  <div class="automation-form-header">
+                    <h5>Click Element</h5>
+                    <button class="automation-form-close" data-close-form="form-click">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="click-selector" placeholder="e.g. #submit-btn, .login-link, button[type=submit]">
+                    <button class="automation-form-btn" id="click-go-btn">Click</button>
+                  </div>
+                </div>
+
+                <!-- Type Tool Form -->
+                <div class="automation-form" id="form-type">
+                  <div class="automation-form-header">
+                    <h5>Type Text</h5>
+                    <button class="automation-form-close" data-close-form="form-type">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="type-selector" placeholder="e.g. #email, input[name=search]">
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Text</span>
+                    <input type="text" id="type-text" placeholder="Text to type...">
+                    <button class="automation-form-btn" id="type-go-btn">Type</button>
+                  </div>
+                </div>
+
+                <!-- Extract Tool Form -->
+                <div class="automation-form" id="form-extract">
+                  <div class="automation-form-header">
+                    <h5>Extract Content</h5>
+                    <button class="automation-form-close" data-close-form="form-extract">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="extract-selector" placeholder="e.g. .article-body, table, h1 (leave empty for full page)">
+                    <button class="automation-form-btn" id="extract-go-btn">Extract</button>
+                  </div>
+                  <div class="extract-results" id="extract-results"></div>
+                </div>
+
+                <!-- Auto Task Form -->
+                <div class="automation-form" id="form-auto-task">
+                  <div class="automation-form-header">
+                    <h5>Automated Task</h5>
+                    <button class="automation-form-close" data-close-form="form-auto-task">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Task</span>
+                    <input type="text" id="auto-task-input" placeholder="e.g. Log in with user@example.com, search for flights to NYC...">
+                    <button class="automation-form-btn" id="auto-task-go-btn">Run</button>
+                  </div>
+                  <div class="auto-task-status" id="auto-task-status">
+                    <div class="loading-spinner"></div>
+                    <span id="auto-task-status-text">Running task...</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Console Panel -->
+              <div class="panel-section" id="console-panel">
+                <div class="console-output" id="console-output">
+                  <div class="elements-placeholder">
+                    <span>Console output will appear here</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Elements Panel -->
+              <div class="panel-section" id="elements-panel">
+                <div class="elements-placeholder">
+                  <span>🔍</span>
+                  <span>Element inspection coming soon</span>
                 </div>
               </div>
             </div>

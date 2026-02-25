@@ -238,6 +238,43 @@ function initializeUI() {
     clearBtn.addEventListener('click', clearChat);
   }
 
+  // Model selector — sync with appState
+  const modelSelector = document.getElementById('model-selector');
+  if (modelSelector) {
+    // Restore saved selection
+    const savedModel = appState.get('selectedModel');
+    if (savedModel) {
+      modelSelector.value = savedModel;
+    }
+    modelSelector.addEventListener('change', (e) => {
+      const model = e.target.value;
+      appState.set('selectedModel', model);
+      // Update the header indicator text
+      const indicator = document.getElementById('current-model');
+      if (indicator) {
+        indicator.textContent = modelSelector.options[modelSelector.selectedIndex].text;
+      }
+    });
+    // Set initial state
+    appState.set('selectedModel', modelSelector.value);
+  }
+
+  // File attachment — trigger hidden file input
+  const attachBtn = document.getElementById('attach-file');
+  const fileInput = document.getElementById('file-input');
+  if (attachBtn && fileInput) {
+    attachBtn.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length > 0) {
+        const names = files.map(f => f.name).join(', ');
+        showToast(`Attached: ${names}`, 'info');
+      }
+      // Reset so the same file can be re-selected
+      fileInput.value = '';
+    });
+  }
+
   // Settings navigation
   document.querySelectorAll('.settings-nav-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -404,6 +441,29 @@ function addMessage(role, content, metadata = {}) {
   }
 
   messageDiv.appendChild(contentDiv);
+
+  // Add code block copy buttons (wrap each <pre> in a header + wrapper)
+  addCodeBlockCopyButtons(contentDiv);
+
+  // Add message action buttons (copy) — skip for system/welcome messages
+  if (role !== 'system') {
+    const actionsDiv = document.createElement('div');
+    actionsDiv.className = 'message-actions';
+    actionsDiv.innerHTML = `
+      <button class="message-action-btn" data-action="copy" title="Copy message">📋</button>
+    `;
+    actionsDiv.querySelector('[data-action="copy"]').addEventListener('click', () => {
+      const textContent = typeof content === 'string' ? content : (content.summary || JSON.stringify(content));
+      navigator.clipboard.writeText(textContent).then(() => {
+        const btn = actionsDiv.querySelector('[data-action="copy"]');
+        btn.classList.add('copied');
+        btn.textContent = '\u2713';
+        setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '\uD83D\uDCCB'; }, 1500);
+      });
+    });
+    messageDiv.appendChild(actionsDiv);
+  }
+
   chatMessages.appendChild(messageDiv);
 
   // Scroll to bottom
@@ -414,6 +474,50 @@ function addMessage(role, content, metadata = {}) {
     role,
     content,
     timestamp: Date.now()
+  });
+}
+
+/**
+ * Wraps each <pre> code block inside the given container with a header
+ * containing a language label and a copy button.
+ */
+function addCodeBlockCopyButtons(container) {
+  container.querySelectorAll('pre').forEach((pre) => {
+    // Skip if already wrapped
+    if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) return;
+
+    const codeEl = pre.querySelector('code');
+    // Detect language from class e.g. "language-javascript" or "hljs language-js"
+    let lang = '';
+    if (codeEl) {
+      const match = (codeEl.className || '').match(/language-(\w+)/);
+      if (match) lang = match[1];
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+    header.innerHTML = `
+      <span class="code-block-lang">${lang || 'code'}</span>
+      <button class="code-copy-btn" title="Copy code">Copy</button>
+    `;
+
+    const copyBtn = header.querySelector('.code-copy-btn');
+    copyBtn.addEventListener('click', () => {
+      const codeText = codeEl ? codeEl.textContent : pre.textContent;
+      navigator.clipboard.writeText(codeText).then(() => {
+        copyBtn.textContent = 'Copied!';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.classList.remove('copied'); }, 1500);
+      });
+    });
+
+    // Replace pre with wrapper containing header + pre
+    pre.parentNode.insertBefore(wrapper, pre);
+    wrapper.appendChild(header);
+    wrapper.appendChild(pre);
   });
 }
 
@@ -581,9 +685,15 @@ function handleTaskResult(result) {
   }
 }
 
+/**
+ * Renders orchestration progress as a step-by-step panel inside the task list,
+ * with completed steps showing a checkmark, the current step showing a spinner,
+ * and future steps dimmed.
+ */
 function handleOrchestrationProgress(event) {
-  const { step, total, agent, description, status } = event;
+  const { step, total, agent, description, status, steps } = event;
 
+  // Also post a chat message for major events
   if (status === 'executing') {
     addMessage('assistant', `Step ${step}/${total}: [${agent}] ${description}`, {
       type: 'orchestration_step'
@@ -593,11 +703,97 @@ function handleOrchestrationProgress(event) {
       type: 'error'
     });
   }
+
+  // Render step-by-step progress in the task panel
+  renderOrchestrationSteps(event);
+}
+
+/**
+ * Renders the orchestration steps visualization into the task panel.
+ */
+function renderOrchestrationSteps(event) {
+  const taskList = document.getElementById('task-list');
+  if (!taskList) return;
+
+  const { step, total, agent, description, status, steps: stepDetails } = event;
+
+  // Find or create the orchestration container
+  let orchContainer = taskList.querySelector('.orchestration-steps');
+  if (!orchContainer) {
+    // Remove empty state
+    const emptyState = taskList.querySelector('.empty-state');
+    if (emptyState) emptyState.remove();
+
+    orchContainer = document.createElement('div');
+    orchContainer.className = 'orchestration-steps';
+    taskList.prepend(orchContainer);
+  }
+
+  // Build summary
+  const completedCount = step - (status === 'executing' ? 1 : 0);
+  const summaryText = status === 'completed'
+    ? `All ${total} steps completed`
+    : `Step ${step} of ${total} ${status === 'failed' ? '(failed)' : 'in progress'}`;
+
+  // Build the steps list
+  let stepsHtml = `<div class="orchestration-summary">${summaryText}</div>`;
+
+  for (let i = 1; i <= total; i++) {
+    let indicatorClass = 'pending';
+    let indicatorContent = i;
+    let descClass = 'dimmed';
+    let stepAgent = '';
+    let stepDesc = `Step ${i}`;
+
+    if (i < step || (i === step && (status === 'completed' || status === 'done'))) {
+      indicatorClass = 'completed';
+      indicatorContent = '\u2713';
+      descClass = '';
+    } else if (i === step && status === 'executing') {
+      indicatorClass = 'current';
+      descClass = '';
+    } else if (i === step && status === 'failed') {
+      indicatorClass = 'failed';
+      indicatorContent = '\u2717';
+      descClass = '';
+    }
+
+    // Use provided details for the current/past step
+    if (i === step) {
+      stepAgent = agent || '';
+      stepDesc = description || stepDesc;
+    }
+    // If step details array is available, use it
+    if (stepDetails && stepDetails[i - 1]) {
+      stepAgent = stepDetails[i - 1].agent || stepAgent;
+      stepDesc = stepDetails[i - 1].description || stepDesc;
+    }
+
+    const indicatorEl = indicatorClass === 'current'
+      ? `<div class="step-spinner"></div>`
+      : `<div class="step-indicator ${indicatorClass}">${indicatorContent}</div>`;
+
+    stepsHtml += `
+      <div class="orchestration-step">
+        ${indicatorEl}
+        <div class="step-body">
+          ${stepAgent ? `<div class="step-agent">${stepAgent}</div>` : ''}
+          <div class="step-description ${descClass}">${stepDesc}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  orchContainer.innerHTML = stepsHtml;
 }
 
 // ============================================
 // Browser View
 // ============================================
+
+/** Counter for generating unique tab IDs. */
+let _nextTabId = 2; // tab 1 already exists in initial state
+
 function setupBrowser() {
   const webview = document.getElementById('browser-webview');
   const urlInput = document.getElementById('browser-url');
@@ -605,25 +801,37 @@ function setupBrowser() {
   const forwardBtn = document.getElementById('browser-forward');
   const refreshBtn = document.getElementById('browser-refresh');
   const homeBtn = document.getElementById('browser-home');
+  const goBtn = document.getElementById('browser-go');
   const newTabBtn = document.getElementById('new-tab');
+  const screenshotBtn = document.getElementById('browser-screenshot');
+  const automateBtn = document.getElementById('browser-automate');
+  const panelToggle = document.getElementById('panel-toggle');
 
   if (!webview) return;
 
-  // Webview events
+  // ---- Webview lifecycle events ----
+
   webview.addEventListener('did-start-loading', () => {
     state.browser.isLoading = true;
-    document.getElementById('browser-loading').style.display = 'flex';
+    showBrowserLoading(true);
   });
 
   webview.addEventListener('did-stop-loading', () => {
     state.browser.isLoading = false;
-    document.getElementById('browser-loading').style.display = 'none';
+    showBrowserLoading(false);
     updateBrowserNavigation();
   });
 
   webview.addEventListener('did-navigate', (e) => {
-    urlInput.value = e.url;
+    if (urlInput) urlInput.value = e.url;
     updateActiveTabUrl(e.url);
+    updateSecurityIcon(e.url);
+  });
+
+  webview.addEventListener('did-navigate-in-page', (e) => {
+    if (urlInput) urlInput.value = e.url;
+    updateActiveTabUrl(e.url);
+    updateSecurityIcon(e.url);
   });
 
   webview.addEventListener('page-title-updated', (e) => {
@@ -631,14 +839,28 @@ function setupBrowser() {
   });
 
   webview.addEventListener('page-favicon-updated', (e) => {
-    updateActiveTabFavicon(e.favicons[0]);
+    if (e.favicons && e.favicons.length > 0) {
+      updateActiveTabFavicon(e.favicons[0]);
+    }
   });
 
   webview.addEventListener('new-window', (e) => {
     addNewTab(e.url);
   });
 
-  // Navigation buttons
+  webview.addEventListener('did-fail-load', (e) => {
+    if (e.errorCode !== -3) { // -3 = aborted, ignore
+      console.warn('Webview load failed:', e.errorDescription);
+      showBrowserLoading(false);
+    }
+  });
+
+  webview.addEventListener('console-message', (e) => {
+    appendConsoleEntry(e.level, e.message);
+  });
+
+  // ---- Navigation buttons ----
+
   if (backBtn) {
     backBtn.addEventListener('click', () => {
       if (webview.canGoBack()) webview.goBack();
@@ -663,31 +885,117 @@ function setupBrowser() {
     });
   }
 
-  // URL input
+  // ---- URL bar (Enter key + Go button) ----
+
   if (urlInput) {
     urlInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        let url = urlInput.value.trim();
-        if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) {
-          url = 'https://' + url;
-        }
-        navigateTo(url);
+        navigateFromUrlBar();
       }
+    });
+
+    // Select all on focus
+    urlInput.addEventListener('focus', () => {
+      urlInput.select();
     });
   }
 
-  // New tab
+  if (goBtn) {
+    goBtn.addEventListener('click', navigateFromUrlBar);
+  }
+
+  // ---- New tab ----
+
   if (newTabBtn) {
     newTabBtn.addEventListener('click', () => addNewTab());
   }
 
-  // Automation tools
+  // ---- Toolbar actions ----
+
+  if (screenshotBtn) {
+    screenshotBtn.addEventListener('click', captureBrowserScreenshot);
+  }
+
+  if (automateBtn) {
+    automateBtn.addEventListener('click', () => {
+      const panel = document.getElementById('browser-panel');
+      if (panel) panel.classList.toggle('collapsed');
+    });
+  }
+
+  if (panelToggle) {
+    panelToggle.addEventListener('click', () => {
+      const panel = document.getElementById('browser-panel');
+      if (panel) panel.classList.toggle('collapsed');
+    });
+  }
+
+  // ---- Panel tab switching ----
+
+  document.querySelectorAll('#browser-panel .panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const panelName = tab.dataset.panel;
+      if (!panelName) return;
+
+      // Update tab active state
+      document.querySelectorAll('#browser-panel .panel-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.panel === panelName);
+      });
+
+      // Update section active state
+      document.querySelectorAll('#browser-panel .panel-section').forEach(sec => {
+        sec.classList.toggle('active', sec.id === `${panelName}-panel`);
+      });
+    });
+  });
+
+  // ---- Automation tool buttons ----
+
   document.querySelectorAll('.automation-tools .tool-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const action = btn.dataset.action;
-      executeBrowserAction(action);
+      handleToolButtonClick(action, btn);
     });
   });
+
+  // ---- Inline form close buttons ----
+
+  document.querySelectorAll('.automation-form-close').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const formId = btn.dataset.closeForm;
+      closeAutomationForm(formId);
+    });
+  });
+
+  // ---- Inline form action buttons ----
+
+  setupAutomationForms();
+
+  // Initial nav button state
+  updateBrowserNavigation();
+}
+
+// ---------------------
+// URL Bar Navigation
+// ---------------------
+function navigateFromUrlBar() {
+  const urlInput = document.getElementById('browser-url');
+  if (!urlInput) return;
+
+  let url = urlInput.value.trim();
+  if (!url) return;
+
+  // Detect search queries vs URLs
+  if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('about:')) {
+    // If it looks like a domain (contains dot, no spaces), prepend https
+    if (/^[^\s]+\.[^\s]+$/.test(url)) {
+      url = 'https://' + url;
+    } else {
+      // Treat as a search query
+      url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+    }
+  }
+  navigateTo(url);
 }
 
 function navigateTo(url) {
@@ -700,8 +1008,61 @@ function navigateTo(url) {
   if (urlInput) {
     urlInput.value = url;
   }
+
+  updateSecurityIcon(url);
 }
 
+// ---------------------
+// Security Icon
+// ---------------------
+function updateSecurityIcon(url) {
+  const icon = document.getElementById('security-icon');
+  if (!icon) return;
+
+  if (!url || url.startsWith('about:')) {
+    icon.textContent = '';
+    icon.className = 'security-icon';
+  } else if (url.startsWith('https://')) {
+    icon.textContent = '🔒';
+    icon.className = 'security-icon secure';
+    icon.title = 'Secure connection (HTTPS)';
+  } else {
+    icon.textContent = '⚠️';
+    icon.className = 'security-icon insecure';
+    icon.title = 'Connection is not secure (HTTP)';
+  }
+}
+
+// ---------------------
+// Loading Indicator
+// ---------------------
+function showBrowserLoading(show) {
+  const overlay = document.getElementById('browser-loading');
+  const bar = document.getElementById('browser-loading-bar');
+
+  if (overlay) {
+    overlay.style.display = show ? 'flex' : 'none';
+  }
+
+  if (bar) {
+    if (show) {
+      bar.style.width = '0%';
+      // Animate progress bar
+      requestAnimationFrame(() => {
+        bar.style.width = '70%';
+      });
+    } else {
+      bar.style.width = '100%';
+      setTimeout(() => {
+        bar.style.width = '0%';
+      }, 300);
+    }
+  }
+}
+
+// ---------------------
+// Navigation State
+// ---------------------
 function updateBrowserNavigation() {
   const webview = document.getElementById('browser-webview');
   if (!webview) return;
@@ -709,21 +1070,34 @@ function updateBrowserNavigation() {
   const backBtn = document.getElementById('browser-back');
   const forwardBtn = document.getElementById('browser-forward');
 
-  if (backBtn) {
-    backBtn.style.opacity = webview.canGoBack() ? '1' : '0.3';
-  }
-  if (forwardBtn) {
-    forwardBtn.style.opacity = webview.canGoForward() ? '1' : '0.3';
+  try {
+    const canGoBack = webview.canGoBack();
+    const canGoForward = webview.canGoForward();
+
+    if (backBtn) {
+      backBtn.style.opacity = canGoBack ? '1' : '0.3';
+      backBtn.style.pointerEvents = canGoBack ? 'auto' : 'none';
+    }
+    if (forwardBtn) {
+      forwardBtn.style.opacity = canGoForward ? '1' : '0.3';
+      forwardBtn.style.pointerEvents = canGoForward ? 'auto' : 'none';
+    }
+  } catch (e) {
+    // webview may not be ready yet
   }
 }
 
+// ==========================
+// Tab Management
+// ==========================
+
 function addNewTab(url = 'about:blank') {
-  const newTabId = state.browser.tabs.length + 1;
+  const newTabId = _nextTabId++;
   state.browser.tabs.push({
     id: newTabId,
     title: 'New Tab',
     url: url,
-    favicon: '\uD83C\uDF10'
+    favicon: '🌐'
   });
 
   renderTabs();
@@ -738,59 +1112,98 @@ function renderTabs() {
   const tabsContainer = document.getElementById('browser-tabs');
   if (!tabsContainer) return;
 
-  // Keep the new tab button
-  const newTabBtn = tabsContainer.querySelector('.new-tab-btn');
+  // Clear all children
   tabsContainer.innerHTML = '';
 
+  // Re-create tab elements
   state.browser.tabs.forEach(tab => {
     const tabEl = document.createElement('div');
     tabEl.className = `tab ${tab.id === state.browser.activeTab ? 'active' : ''}`;
     tabEl.dataset.tabId = tab.id;
+
+    // Build favicon — use <img> if it looks like a URL, otherwise text emoji
+    let faviconContent;
+    if (tab.favicon && (tab.favicon.startsWith('http') || tab.favicon.startsWith('data:'))) {
+      faviconContent = `<img src="${tab.favicon}" alt="">`;
+    } else {
+      faviconContent = tab.favicon || '🌐';
+    }
+
     tabEl.innerHTML = `
-      <span class="tab-favicon">${tab.favicon}</span>
-      <span class="tab-title">${tab.title}</span>
+      <span class="tab-favicon">${faviconContent}</span>
+      <span class="tab-title">${escapeHtml(tab.title || 'New Tab')}</span>
       <button class="tab-close" data-tab-id="${tab.id}">\u00D7</button>
     `;
 
+    // Click tab to switch
     tabEl.addEventListener('click', (e) => {
       if (!e.target.classList.contains('tab-close')) {
         switchToTab(tab.id);
       }
     });
 
+    // Close button
     const closeBtn = tabEl.querySelector('.tab-close');
-    closeBtn.addEventListener('click', () => closeTab(tab.id));
+    closeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeTab(tab.id);
+    });
 
     tabsContainer.appendChild(tabEl);
   });
 
-  if (newTabBtn) {
-    tabsContainer.appendChild(newTabBtn);
-  }
+  // Re-create the + button at the end
+  const newTabBtn = document.createElement('button');
+  newTabBtn.className = 'new-tab-btn';
+  newTabBtn.id = 'new-tab';
+  newTabBtn.textContent = '+';
+  newTabBtn.title = 'New Tab';
+  newTabBtn.addEventListener('click', () => addNewTab());
+  tabsContainer.appendChild(newTabBtn);
 }
 
 function switchToTab(tabId) {
+  // Save current webview URL to the old active tab before switching
+  const webview = document.getElementById('browser-webview');
+  const oldTab = state.browser.tabs.find(t => t.id === state.browser.activeTab);
+  if (oldTab && webview) {
+    try {
+      oldTab.url = webview.getURL() || oldTab.url;
+    } catch (e) { /* webview not ready */ }
+  }
+
   state.browser.activeTab = tabId;
   renderTabs();
 
   const tab = state.browser.tabs.find(t => t.id === tabId);
   if (tab) {
     navigateTo(tab.url);
+
+    // Update URL bar
+    const urlInput = document.getElementById('browser-url');
+    if (urlInput) urlInput.value = tab.url || '';
+    updateSecurityIcon(tab.url);
   }
 }
 
 function closeTab(tabId) {
+  // If only one tab, create a new blank one before closing
   if (state.browser.tabs.length <= 1) {
+    state.browser.tabs = state.browser.tabs.filter(t => t.id !== tabId);
     addNewTab();
+    return;
   }
 
+  const closedIndex = state.browser.tabs.findIndex(t => t.id === tabId);
   state.browser.tabs = state.browser.tabs.filter(t => t.id !== tabId);
 
+  // If the closed tab was the active one, switch to the nearest tab
   if (state.browser.activeTab === tabId && state.browser.tabs.length > 0) {
-    switchToTab(state.browser.tabs[0].id);
+    const newIndex = Math.min(closedIndex, state.browser.tabs.length - 1);
+    switchToTab(state.browser.tabs[newIndex].id);
+  } else {
+    renderTabs();
   }
-
-  renderTabs();
 }
 
 function updateActiveTabUrl(url) {
@@ -816,27 +1229,238 @@ function updateActiveTabFavicon(favicon) {
   }
 }
 
-function executeBrowserAction(action) {
-  switch (action) {
-    case 'screenshot':
-      captureBrowserScreenshot();
-      break;
-    case 'click':
-      startElementPicker('click');
-      break;
-    case 'type':
-      startElementPicker('type');
-      break;
-    case 'extract':
-      extractPageContent();
-      break;
-    case 'scroll':
-      scrollPage();
-      break;
-    case 'wait':
-      addMessage('assistant', 'Wait action added to automation sequence');
-      break;
+// ==========================
+// Automation Tool Forms
+// ==========================
+
+function handleToolButtonClick(action, btn) {
+  // Toggle active state on the button
+  const allBtns = document.querySelectorAll('.automation-tools .tool-btn');
+  allBtns.forEach(b => b.classList.remove('active'));
+
+  // Special actions without forms
+  if (action === 'scroll') {
+    scrollPage();
+    return;
   }
+  if (action === 'screenshot') {
+    captureBrowserScreenshot();
+    return;
+  }
+
+  // For form-based actions, show the corresponding form
+  const formId = `form-${action}`;
+  const form = document.getElementById(formId);
+
+  if (form) {
+    // Close all forms first
+    document.querySelectorAll('.automation-form').forEach(f => f.classList.remove('active'));
+    // Open the target form and mark button active
+    form.classList.add('active');
+    btn.classList.add('active');
+    // Focus the first input in the form
+    const firstInput = form.querySelector('input[type="text"]');
+    if (firstInput) firstInput.focus();
+  }
+}
+
+function closeAutomationForm(formId) {
+  const form = document.getElementById(formId);
+  if (form) {
+    form.classList.remove('active');
+  }
+  // Remove active state from all tool buttons
+  document.querySelectorAll('.automation-tools .tool-btn').forEach(b => b.classList.remove('active'));
+}
+
+function setupAutomationForms() {
+  // ---- Click Form ----
+  const clickGoBtn = document.getElementById('click-go-btn');
+  if (clickGoBtn) {
+    clickGoBtn.addEventListener('click', () => {
+      const selector = document.getElementById('click-selector')?.value.trim();
+      if (!selector) {
+        showToast('Please enter a CSS selector', 'warning');
+        return;
+      }
+      executeBrowserClick(selector);
+    });
+  }
+
+  // Enter key in click selector
+  const clickSelector = document.getElementById('click-selector');
+  if (clickSelector) {
+    clickSelector.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') clickGoBtn?.click();
+    });
+  }
+
+  // ---- Type Form ----
+  const typeGoBtn = document.getElementById('type-go-btn');
+  if (typeGoBtn) {
+    typeGoBtn.addEventListener('click', () => {
+      const selector = document.getElementById('type-selector')?.value.trim();
+      const text = document.getElementById('type-text')?.value || '';
+      if (!selector) {
+        showToast('Please enter a CSS selector', 'warning');
+        return;
+      }
+      executeBrowserType(selector, text);
+    });
+  }
+
+  // Enter key in type text field
+  const typeText = document.getElementById('type-text');
+  if (typeText) {
+    typeText.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') typeGoBtn?.click();
+    });
+  }
+
+  // ---- Extract Form ----
+  const extractGoBtn = document.getElementById('extract-go-btn');
+  if (extractGoBtn) {
+    extractGoBtn.addEventListener('click', () => {
+      const selector = document.getElementById('extract-selector')?.value.trim();
+      executeBrowserExtract(selector);
+    });
+  }
+
+  const extractSelector = document.getElementById('extract-selector');
+  if (extractSelector) {
+    extractSelector.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') extractGoBtn?.click();
+    });
+  }
+
+  // ---- Auto Task Form ----
+  const autoTaskGoBtn = document.getElementById('auto-task-go-btn');
+  if (autoTaskGoBtn) {
+    autoTaskGoBtn.addEventListener('click', () => {
+      const task = document.getElementById('auto-task-input')?.value.trim();
+      if (!task) {
+        showToast('Please describe the task', 'warning');
+        return;
+      }
+      executeBrowserAutoTask(task);
+    });
+  }
+
+  const autoTaskInput = document.getElementById('auto-task-input');
+  if (autoTaskInput) {
+    autoTaskInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') autoTaskGoBtn?.click();
+    });
+  }
+}
+
+// ---- Automation Actions ----
+
+function executeBrowserClick(selector) {
+  const webview = document.getElementById('browser-webview');
+  if (!webview) return;
+
+  // Try local webview click first
+  webview.executeJavaScript(`
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (el) { el.click(); return 'clicked'; }
+      return 'not_found';
+    })()
+  `).then(result => {
+    if (result === 'clicked') {
+      showToast('Element clicked: ' + selector, 'success');
+    } else {
+      showToast('Element not found: ' + selector, 'warning');
+    }
+  }).catch(err => {
+    console.error('Click failed:', err);
+    showToast('Click failed: ' + err.message, 'error');
+  });
+
+  // Also send to backend for recording / more advanced automation
+  wsManager.send('browser_click', { selector }).catch(() => {});
+}
+
+function executeBrowserType(selector, text) {
+  const webview = document.getElementById('browser-webview');
+  if (!webview) return;
+
+  webview.executeJavaScript(`
+    (function() {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (el) {
+        el.focus();
+        el.value = ${JSON.stringify(text)};
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return 'typed';
+      }
+      return 'not_found';
+    })()
+  `).then(result => {
+    if (result === 'typed') {
+      showToast('Text typed into: ' + selector, 'success');
+    } else {
+      showToast('Element not found: ' + selector, 'warning');
+    }
+  }).catch(err => {
+    console.error('Type failed:', err);
+    showToast('Type failed: ' + err.message, 'error');
+  });
+
+  wsManager.send('browser_type', { selector, text }).catch(() => {});
+}
+
+function executeBrowserExtract(selector) {
+  const webview = document.getElementById('browser-webview');
+  if (!webview) return;
+
+  const extractCode = selector
+    ? `(function() {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        return el ? el.innerText : 'Element not found: ${selector}';
+      })()`
+    : `document.body.innerText.substring(0, 10000)`;
+
+  webview.executeJavaScript(extractCode).then(text => {
+    const resultsEl = document.getElementById('extract-results');
+    if (resultsEl) {
+      resultsEl.textContent = text;
+      resultsEl.classList.add('has-content');
+    }
+    showToast('Content extracted', 'success');
+  }).catch(err => {
+    console.error('Extract failed:', err);
+    showToast('Extract failed: ' + err.message, 'error');
+  });
+
+  wsManager.send('browser_extract', { selector: selector || 'body' }).catch(() => {});
+}
+
+function executeBrowserAutoTask(task) {
+  const statusEl = document.getElementById('auto-task-status');
+  const statusText = document.getElementById('auto-task-status-text');
+
+  if (statusEl) statusEl.classList.add('active');
+  if (statusText) statusText.textContent = 'Running task...';
+
+  wsManager.send('browser_execute', {
+    task,
+    url: document.getElementById('browser-url')?.value || '',
+    context: {
+      conversation_history: state.conversations.slice(-5)
+    }
+  }).then(result => {
+    if (statusText) statusText.textContent = 'Task completed';
+    if (statusEl) {
+      setTimeout(() => statusEl.classList.remove('active'), 3000);
+    }
+    showToast('Auto task completed', 'success');
+  }).catch(err => {
+    if (statusText) statusText.textContent = 'Task failed: ' + err.message;
+    showToast('Auto task failed: ' + err.message, 'error');
+  });
 }
 
 async function captureBrowserScreenshot() {
@@ -845,26 +1469,16 @@ async function captureBrowserScreenshot() {
 
   try {
     const image = await webview.capturePage();
-    // Show screenshot in chat
-    addMessage('assistant', 'Browser screenshot captured');
+    if (image && !image.isEmpty()) {
+      const dataUrl = image.toDataURL();
+      addMessage('assistant', `Browser screenshot captured:\n\n![Screenshot](${dataUrl})`);
+      showToast('Screenshot captured', 'success');
+    } else {
+      addMessage('assistant', 'Browser screenshot captured (empty page)');
+    }
   } catch (e) {
     console.error('Screenshot failed:', e);
-  }
-}
-
-function startElementPicker(action) {
-  addMessage('assistant', `Click on an element to ${action} it...`);
-  // This would integrate with the browser automation backend
-}
-
-function extractPageContent() {
-  const webview = document.getElementById('browser-webview');
-  if (webview) {
-    webview.executeJavaScript(`
-      document.body.innerText.substring(0, 5000)
-    `).then(text => {
-      addMessage('assistant', `Extracted content:\n\n${text.substring(0, 1000)}...`);
-    });
+    showToast('Screenshot failed: ' + e.message, 'error');
   }
 }
 
@@ -872,9 +1486,32 @@ function scrollPage() {
   const webview = document.getElementById('browser-webview');
   if (webview) {
     webview.executeJavaScript(`
-      window.scrollBy(0, window.innerHeight / 2);
-    `);
+      window.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
+    `).catch(() => {});
+    showToast('Page scrolled', 'info');
   }
+}
+
+// ---------------------
+// Console Panel
+// ---------------------
+function appendConsoleEntry(level, message) {
+  const output = document.getElementById('console-output');
+  if (!output) return;
+
+  // Remove placeholder if present
+  const placeholder = output.querySelector('.elements-placeholder');
+  if (placeholder) placeholder.remove();
+
+  const levelMap = { 0: 'log', 1: 'warn', 2: 'error' };
+  const levelName = levelMap[level] || 'log';
+  const timestamp = new Date().toLocaleTimeString();
+
+  const entry = document.createElement('div');
+  entry.className = `console-entry ${levelName}`;
+  entry.innerHTML = `<span class="console-timestamp">${timestamp}</span>${escapeHtml(message)}`;
+  output.appendChild(entry);
+  output.scrollTop = output.scrollHeight;
 }
 
 // ============================================
