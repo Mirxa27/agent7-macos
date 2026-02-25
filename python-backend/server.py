@@ -22,10 +22,22 @@ from browser_use.agent.views import ActionResult
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_aws import ChatBedrockConverse
 import cv2
 import numpy as np
 from PIL import Image
 import io
+
+# Browser package imports
+from browser import (
+    AgentBrowserConfig,
+    ReliableBrowser,
+    CircuitBreakerOpen,
+    SessionManager,
+    SmartVision,
+    EnhancedAgent,
+    AgentOrchestrator,
+)
 
 # Setup logging
 logging.basicConfig(
@@ -97,139 +109,44 @@ class AgentMemory:
         return sorted(relevant, key=lambda x: x["similarity"], reverse=True)[:k]
 
 
-class VisionAnalyzer:
-    """Advanced vision capabilities for UI understanding"""
-
-    def __init__(self):
-        self.element_cache = {}
-
-    async def analyze_screenshot(self, screenshot_path: str) -> Dict[str, Any]:
-        """Analyze screenshot to identify UI elements and context"""
-        try:
-            # Read image
-            image = cv2.imread(screenshot_path)
-            if image is None:
-                return {"error": "Failed to load screenshot"}
-
-            # Basic image analysis
-            height, width = image.shape[:2]
-
-            # Detect text regions (simplified - in production use OCR)
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-            # Detect edges and shapes
-            edges = cv2.Canny(gray, 50, 150)
-            contours, _ = cv2.findContours(
-                edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-            )
-
-            # Identify potential interactive elements
-            elements = []
-            for i, contour in enumerate(contours[:50]):  # Limit to top 50
-                x, y, w, h = cv2.boundingRect(contour)
-                if w > 30 and h > 20:  # Filter small elements
-                    aspect_ratio = w / float(h)
-                    elements.append(
-                        {
-                            "id": f"element_{i}",
-                            "bbox": [x, y, w, h],
-                            "center": [x + w // 2, y + h // 2],
-                            "aspect_ratio": aspect_ratio,
-                            "area": w * h,
-                            "type": self.classify_element(aspect_ratio, w, h),
-                        }
-                    )
-
-            return {
-                "dimensions": {"width": width, "height": height},
-                "elements": elements,
-                "element_count": len(elements),
-                "timestamp": datetime.now().isoformat(),
-            }
-        except Exception as e:
-            logger.error(f"Vision analysis error: {e}")
-            return {"error": str(e)}
-
-    def classify_element(self, aspect_ratio: float, width: int, height: int) -> str:
-        """Classify UI element type based on shape"""
-        if 0.9 < aspect_ratio < 1.1 and width < 100:
-            return "button"
-        elif aspect_ratio > 3:
-            return "input_field"
-        elif aspect_ratio < 0.3:
-            return "scrollbar"
-        elif width > 200 and height > 100:
-            return "content_area"
-        else:
-            return "unknown"
-
-    async def find_element_by_description(
-        self, screenshot_path: str, description: str
-    ) -> Optional[Dict]:
-        """Find element matching natural language description"""
-        analysis = await self.analyze_screenshot(screenshot_path)
-        elements = analysis.get("elements", [])
-
-        # Simple matching - in production use vision-language model
-        description_lower = description.lower()
-        best_match = None
-        best_score = 0
-
-        for element in elements:
-            score = 0
-            if "button" in description_lower and element["type"] == "button":
-                score += 0.5
-            if "input" in description_lower and element["type"] == "input_field":
-                score += 0.5
-
-            if score > best_score:
-                best_score = score
-                best_match = element
-
-        return best_match
-
-
-class BrowserAgent:
-    """Advanced browser automation with live browser-use integration"""
+class AutonomousAgent:
+    """Advanced autonomous agent with planning and self-improvement"""
 
     def __init__(self, api_keys: Dict[str, str]):
         self.api_keys = api_keys
-        self.browser: Optional[Browser] = None
-        self.context: Optional[BrowserContext] = None
-        self.agent: Optional[Agent] = None
-        self.controller = Controller()
-        self.vision = VisionAnalyzer()
-        self.current_page = None
-        self.session_history = []
+        self.memory = AgentMemory()
+        self.state = AgentState.IDLE
+        self.current_task: Optional[Task] = None
+        self.skill_library = {}
+        self.planning_strategies = {}
+
+        # New layered browser automation
+        self._browser_config = AgentBrowserConfig()
+        self._session_manager = SessionManager(config=self._browser_config)
+        self._reliable_browser = ReliableBrowser(config=self._browser_config)
+        self._smart_vision = SmartVision()
+        self._enhanced_agent = EnhancedAgent(config=self._browser_config)
+
+        # Legacy compat: keep browser_agent reference pointing to reliable_browser
+        self.browser_agent = self._reliable_browser
 
     async def initialize(self):
-        """Initialize browser with advanced configuration"""
-        try:
-            config = BrowserConfig(
-                headless=False,  # Show browser for live interaction
-                chrome_instance_path=None,  # Use playwright-managed browser
-                extra_chromium_args=[
-                    "--no-sandbox",
-                    "--disable-setuid-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-accelerated-2d-canvas",
-                    "--no-first-run",
-                    "--no-zygote",
-                    "--single-process",
-                    "--disable-gpu",
-                ],
-            )
+        """Initialize autonomous agent with new browser layers."""
+        await self._session_manager.initialize()
+        context = await self._session_manager.get_context()
+        self._reliable_browser.set_context(context)
 
-            self.browser = Browser(config=config)
-            self.context = await self.browser.new_context()
-            logger.info("Browser initialized successfully")
-
-        except Exception as e:
-            logger.error(f"Browser initialization error: {e}")
-            raise
+        # Wire up the enhanced agent
+        llm = self.get_llm()
+        self._enhanced_agent.set_components(
+            reliable_browser=self._reliable_browser,
+            smart_vision=self._smart_vision,
+            llm=llm,
+        )
+        logger.info("Autonomous agent initialized with enhanced browser layers")
 
     def get_llm(self, provider: str = "openai"):
-        """Get language model for agent"""
+        """Get language model based on available API keys."""
         if provider == "openai" and self.api_keys.get("openai"):
             return ChatOpenAI(
                 model="gpt-4o", api_key=self.api_keys["openai"], temperature=0.3
@@ -246,179 +163,24 @@ class BrowserAgent:
                 api_key=self.api_keys["google"],
                 temperature=0.3,
             )
-        else:
-            raise ValueError(f"No API key available for provider: {provider}")
-
-    async def execute_task(self, task: str, provider: str = "openai") -> Dict[str, Any]:
-        """Execute autonomous browser task using browser-use"""
-        try:
-            if not self.browser:
-                await self.initialize()
-
-            # Create agent with task
-            llm = self.get_llm(provider)
-
-            self.agent = Agent(
-                task=task,
-                llm=llm,
-                browser=self.browser,
-                controller=self.controller,
-                use_vision=True,  # Enable vision capabilities
-                save_conversation_path="logs/conversation",
+        elif provider == "bedrock" and self.api_keys.get("bedrock"):
+            bedrock_config = self.api_keys["bedrock"]
+            model_id = bedrock_config.get(
+                "model_id", "anthropic.claude-3-5-sonnet-20241022-v2:0"
             )
-
-            logger.info(f"Starting browser task: {task}")
-
-            # Run the agent
-            result = await self.agent.run()
-
-            # Extract results
-            final_result = {
-                "success": result.is_done() if hasattr(result, "is_done") else True,
-                "output": result.final_result()
-                if hasattr(result, "final_result")
-                else str(result),
-                "actions": self.extract_actions(result),
-                "url": await self.get_current_url(),
-                "timestamp": datetime.now().isoformat(),
-            }
-
-            self.session_history.append(
-                {
-                    "task": task,
-                    "result": final_result,
-                    "timestamp": datetime.now().isoformat(),
-                }
+            return ChatBedrockConverse(
+                model_id=model_id,
+                region_name=bedrock_config.get("region", "us-east-1"),
+                credentials_profile_name=None,
+                aws_access_key_id=bedrock_config.get("aws_access_key_id"),
+                aws_secret_access_key=bedrock_config.get("aws_secret_access_key"),
+                temperature=0.3,
             )
-
-            return final_result
-
-        except Exception as e:
-            logger.error(f"Browser task execution error: {e}")
-            traceback.print_exc()
-            return {
-                "success": False,
-                "error": str(e),
-                "traceback": traceback.format_exc(),
-            }
-
-    def extract_actions(self, result) -> List[Dict]:
-        """Extract actions from agent result"""
-        actions = []
-        # Access action history from agent
-        if hasattr(self.agent, "history"):
-            for action in self.agent.history:
-                actions.append(
-                    {
-                        "action": action.get_description()
-                        if hasattr(action, "get_description")
-                        else str(action),
-                        "timestamp": datetime.now().isoformat(),
-                    }
-                )
-        return actions
-
-    async def get_current_url(self) -> str:
-        """Get current page URL"""
-        try:
-            if self.context and self.context.page:
-                return self.context.page.url
-            return ""
-        except:
-            return ""
-
-    async def get_screenshot(self) -> str:
-        """Capture and return screenshot as base64"""
-        try:
-            if self.context and self.context.page:
-                screenshot = await self.context.page.screenshot(
-                    type="jpeg", quality=80, full_page=False
-                )
-                return base64.b64encode(screenshot).decode("utf-8")
-            return ""
-        except Exception as e:
-            logger.error(f"Screenshot error: {e}")
-            return ""
-
-    async def navigate(self, url: str) -> Dict[str, Any]:
-        """Navigate to URL"""
-        try:
-            if self.context and self.context.page:
-                await self.context.page.goto(url, wait_until="networkidle")
-                return {
-                    "success": True,
-                    "url": url,
-                    "title": await self.context.page.title(),
-                }
-            return {"success": False, "error": "Browser not initialized"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def click(self, selector: str) -> Dict[str, Any]:
-        """Click element by selector"""
-        try:
-            if self.context and self.context.page:
-                await self.context.page.click(selector)
-                return {"success": True, "action": f"clicked {selector}"}
-            return {"success": False, "error": "Browser not initialized"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def type_text(self, selector: str, text: str) -> Dict[str, Any]:
-        """Type text into element"""
-        try:
-            if self.context and self.context.page:
-                await self.context.page.fill(selector, text)
-                return {"success": True, "action": f"typed into {selector}"}
-            return {"success": False, "error": "Browser not initialized"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def extract_content(self, selector: str = None) -> Dict[str, Any]:
-        """Extract content from page"""
-        try:
-            if self.context and self.context.page:
-                if selector:
-                    elements = await self.context.page.query_selector_all(selector)
-                    content = []
-                    for elem in elements[:10]:  # Limit to first 10
-                        text = await elem.text_content()
-                        content.append(text)
-                    return {"success": True, "content": content}
-                else:
-                    # Get full page content
-                    content = await self.context.page.content()
-                    return {"success": True, "content": content[:5000]}  # Limit size
-            return {"success": False, "error": "Browser not initialized"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    async def close(self):
-        """Close browser"""
-        try:
-            if self.browser:
-                await self.browser.close()
-                logger.info("Browser closed")
-        except Exception as e:
-            logger.error(f"Error closing browser: {e}")
-
-
-class AutonomousAgent:
-    """Advanced autonomous agent with planning and self-improvement"""
-
-    def __init__(self, api_keys: Dict[str, str]):
-        self.api_keys = api_keys
-        self.memory = AgentMemory()
-        self.browser_agent = BrowserAgent(api_keys)
-        self.state = AgentState.IDLE
-        self.current_task: Optional[Task] = None
-        self.skill_library = {}
-        self.planning_strategies = {}
-
-    async def initialize(self):
-        """Initialize autonomous agent"""
-        await self.browser_agent.initialize()
-        logger.info("Autonomous agent initialized")
+        # Fallback: try any available provider
+        for p in ["openai", "anthropic", "google", "bedrock"]:
+            if self.api_keys.get(p):
+                return self.get_llm(p)
+        raise ValueError("No API key available for any provider")
 
     async def execute_complex_task(
         self, goal: str, context: Dict = None
@@ -531,7 +293,7 @@ Return ONLY a JSON object with this structure:
 
         try:
             # Call LLM for planning
-            llm = self.browser_agent.get_llm("openai")
+            llm = self.get_llm("openai")
             response = await llm.ainvoke(plan_prompt)
 
             # Parse plan
@@ -591,8 +353,8 @@ Return ONLY a JSON object with this structure:
         action = step.get("action", "")
 
         if tool == "browser":
-            # Use browser agent
-            return await self.browser_agent.execute_task(action)
+            # Use enhanced agent for browser tasks
+            return await self._enhanced_agent.execute_task(action, context)
         elif tool == "code":
             # Execute code
             return await self.execute_code(action)
@@ -729,6 +491,38 @@ class Agent7Server:
                     )
                     response["result"] = result
 
+            elif method == "orchestrate_task":
+                # Multi-agent orchestrated execution
+                if not self.autonomous_agent:
+                    response["error"] = "Agent not initialized"
+                else:
+                    goal = params.get("goal", params.get("task", ""))
+                    context = params.get("context", {})
+
+                    orchestrator = AgentOrchestrator()
+                    orchestrator.set_llm(self.autonomous_agent.get_llm())
+                    orchestrator.initialize_agents()
+
+                    # Wire browser agent handler
+                    orchestrator.register_handler(
+                        "browser",
+                        lambda task: self.autonomous_agent._enhanced_agent.execute_task(
+                            task.get("description", ""), task
+                        ),
+                    )
+
+                    # Wire progress broadcasting
+                    async def broadcast_progress(event):
+                        await self.broadcast({
+                            "type": "orchestration_progress",
+                            "data": event,
+                        })
+
+                    orchestrator.on_progress = broadcast_progress
+
+                    result = await orchestrator.orchestrate(goal, context)
+                    response["result"] = result
+
             elif method == "browser_navigate":
                 if self.autonomous_agent:
                     url = params.get("url", "")
@@ -757,12 +551,18 @@ class Agent7Server:
                     )
                     response["result"] = {"screenshot": screenshot}
 
+            elif method == "browser_extract":
+                if self.autonomous_agent:
+                    selector = params.get("selector")
+                    result = await self.autonomous_agent.browser_agent.extract_content(selector)
+                    response["result"] = result
+
             elif method == "browser_execute":
                 if self.autonomous_agent:
                     task = params.get("task", "")
-                    provider = params.get("provider", "openai")
-                    result = await self.autonomous_agent.browser_agent.execute_task(
-                        task, provider
+                    context = params.get("context", {})
+                    result = await self.autonomous_agent._enhanced_agent.execute_task(
+                        task, context
                     )
                     response["result"] = result
 

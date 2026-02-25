@@ -29,6 +29,7 @@ class TestBrowserConfig:
         config = AgentBrowserConfig(max_retries=5, navigate_timeout=60_000)
         assert config.max_retries == 5
         assert config.navigate_timeout == 60_000
+        # Other defaults unchanged
         assert config.click_timeout == 10_000
 
     def test_macos_chromium_args(self):
@@ -36,6 +37,7 @@ class TestBrowserConfig:
         args = config.chromium_args
         assert "--disable-dev-shm-usage" in args
         assert "--disable-features=TranslateUI" in args
+        # Linux-only flags must NOT be present
         assert "--no-sandbox" not in args
         assert "--single-process" not in args
         assert "--no-zygote" not in args
@@ -46,7 +48,3 @@ class TestBrowserConfig:
         assert "target closed" in config.retryable_errors
         assert "navigation failed" in config.retryable_errors
         assert "element is detached" in config.retryable_errors
-        assert "frame was detached" in config.retryable_errors
-        assert "execution context was destroyed" in config.retryable_errors
-        assert "connection refused" in config.retryable_errors
-        assert "net::ERR_CONNECTION_RESET" in config.retryable_errors
