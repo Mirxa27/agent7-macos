@@ -725,6 +725,9 @@ function handleOrchestrationProgress(event) {
       state.agentDashboard.taskHistory[agent] = state.agentDashboard.taskHistory[agent].slice(-50);
     }
   }
+
+  // Update workflow progress if this orchestration was triggered by a workflow
+  updateWorkflowProgress(event);
 }
 
 /**
@@ -3218,6 +3221,444 @@ function saveAgent() {
   updateAgentsList(state.agents);
   closeModal('agent-modal');
   showToast(`${name} has been created successfully`, 'success');
+}
+
+// ============================================
+// Workflows — CRUD, Step Editor, Run, Persistence
+// ============================================
+
+/**
+ * Load workflows from localStorage.
+ * @returns {Array} Array of workflow objects
+ */
+function loadWorkflows() {
+  try {
+    return JSON.parse(localStorage.getItem('agent7_workflows') || '[]');
+  } catch (e) {
+    console.error('Failed to parse workflows:', e);
+    return [];
+  }
+}
+
+/**
+ * Save workflows array to localStorage.
+ * @param {Array} workflows
+ */
+function saveWorkflows(workflows) {
+  localStorage.setItem('agent7_workflows', JSON.stringify(workflows));
+}
+
+/**
+ * Generate a simple unique id for workflows.
+ */
+function generateWorkflowId() {
+  return 'wf_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+/** Currently editing workflow id (null = creating new) */
+let editingWorkflowId = null;
+
+/** Modal step data (in-memory while modal is open) */
+let modalSteps = [];
+
+/**
+ * Wire up Workflow view buttons and modal interactions.
+ * Called once from DOMContentLoaded.
+ */
+function setupWorkflows() {
+  // "New Workflow" button
+  const newBtn = document.getElementById('new-workflow-btn');
+  if (newBtn) {
+    newBtn.addEventListener('click', () => {
+      openWorkflowModal(null);
+    });
+  }
+
+  // "Add Step" button inside modal
+  const addStepBtn = document.getElementById('add-step-btn');
+  if (addStepBtn) {
+    addStepBtn.addEventListener('click', () => {
+      modalSteps.push({ description: '', agent: 'planner' });
+      renderModalSteps();
+    });
+  }
+
+  // "Save Workflow" button
+  const saveBtn = document.getElementById('save-workflow-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', saveWorkflow);
+  }
+
+  // Initial render (in case user navigates here first)
+  renderWorkflowList();
+}
+
+/**
+ * Open the workflow create/edit modal.
+ * @param {string|null} workflowId - null for new, string id for edit
+ */
+function openWorkflowModal(workflowId) {
+  editingWorkflowId = workflowId;
+
+  const titleEl = document.getElementById('workflow-modal-title');
+  const nameInput = document.getElementById('workflow-name');
+  const manualRadio = document.getElementById('trigger-manual');
+  const scheduleRadio = document.getElementById('trigger-schedule');
+
+  if (workflowId) {
+    // Edit mode — populate from existing
+    const workflows = loadWorkflows();
+    const wf = workflows.find(w => w.id === workflowId);
+    if (!wf) return;
+
+    if (titleEl) titleEl.textContent = 'Edit Workflow';
+    if (nameInput) nameInput.value = wf.name || '';
+    if (wf.trigger === 'schedule') {
+      if (scheduleRadio) scheduleRadio.checked = true;
+    } else {
+      if (manualRadio) manualRadio.checked = true;
+    }
+    modalSteps = (wf.steps || []).map(s => ({ ...s }));
+  } else {
+    // Create mode — blank
+    if (titleEl) titleEl.textContent = 'New Workflow';
+    if (nameInput) nameInput.value = '';
+    if (manualRadio) manualRadio.checked = true;
+    modalSteps = [{ description: '', agent: 'planner' }];
+  }
+
+  renderModalSteps();
+  openModal('workflow-modal');
+
+  // Focus the name input
+  setTimeout(() => { if (nameInput) nameInput.focus(); }, 100);
+}
+
+/**
+ * Render the step list inside the modal.
+ */
+function renderModalSteps() {
+  const container = document.getElementById('step-list');
+  if (!container) return;
+
+  const agentOptions = [
+    'planner', 'researcher', 'executor', 'coder', 'browser', 'file_manager', 'reviewer'
+  ];
+
+  container.innerHTML = modalSteps.map((step, idx) => `
+    <div class="step-item" data-step-idx="${idx}" draggable="true">
+      <span class="step-drag-handle" title="Drag to reorder">&#9776;</span>
+      <span class="step-number">${idx + 1}</span>
+      <div class="step-fields">
+        <input
+          type="text"
+          class="step-desc-input"
+          data-step-idx="${idx}"
+          placeholder="Describe this step..."
+          value="${escapeHtml(step.description)}"
+        >
+        <select class="step-agent-select" data-step-idx="${idx}">
+          ${agentOptions.map(a =>
+            `<option value="${a}" ${step.agent === a ? 'selected' : ''}>${a}</option>`
+          ).join('')}
+        </select>
+      </div>
+      <button class="step-delete-btn" data-step-idx="${idx}" title="Remove step">&times;</button>
+    </div>
+  `).join('');
+
+  // Bind input change handlers
+  container.querySelectorAll('.step-desc-input').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const idx = parseInt(e.target.dataset.stepIdx, 10);
+      if (modalSteps[idx]) modalSteps[idx].description = e.target.value;
+    });
+  });
+
+  container.querySelectorAll('.step-agent-select').forEach(select => {
+    select.addEventListener('change', (e) => {
+      const idx = parseInt(e.target.dataset.stepIdx, 10);
+      if (modalSteps[idx]) modalSteps[idx].agent = e.target.value;
+    });
+  });
+
+  // Delete step buttons
+  container.querySelectorAll('.step-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(e.target.dataset.stepIdx, 10);
+      modalSteps.splice(idx, 1);
+      renderModalSteps();
+    });
+  });
+
+  // Drag-and-drop reordering
+  setupStepDragAndDrop(container);
+}
+
+/**
+ * Set up drag-and-drop reordering for step items.
+ */
+function setupStepDragAndDrop(container) {
+  let dragIdx = null;
+
+  container.querySelectorAll('.step-item').forEach(item => {
+    item.addEventListener('dragstart', (e) => {
+      dragIdx = parseInt(item.dataset.stepIdx, 10);
+      item.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(dragIdx));
+    });
+
+    item.addEventListener('dragend', () => {
+      item.classList.remove('dragging');
+      container.querySelectorAll('.step-item').forEach(el => el.classList.remove('drag-over'));
+      dragIdx = null;
+    });
+
+    item.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const overIdx = parseInt(item.dataset.stepIdx, 10);
+      container.querySelectorAll('.step-item').forEach(el => el.classList.remove('drag-over'));
+      if (overIdx !== dragIdx) {
+        item.classList.add('drag-over');
+      }
+    });
+
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('drag-over');
+    });
+
+    item.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const fromIdx = dragIdx;
+      const toIdx = parseInt(item.dataset.stepIdx, 10);
+      if (fromIdx === null || fromIdx === toIdx) return;
+
+      // Reorder
+      const [moved] = modalSteps.splice(fromIdx, 1);
+      modalSteps.splice(toIdx, 0, moved);
+      renderModalSteps();
+    });
+  });
+}
+
+/**
+ * Save the workflow from the modal form.
+ */
+function saveWorkflow() {
+  const nameInput = document.getElementById('workflow-name');
+  const name = (nameInput ? nameInput.value : '').trim();
+  if (!name) {
+    showToast('Workflow name is required', 'error');
+    if (nameInput) nameInput.focus();
+    return;
+  }
+
+  // Collect non-empty steps
+  const steps = modalSteps.filter(s => s.description.trim() !== '').map(s => ({
+    description: s.description.trim(),
+    agent: s.agent
+  }));
+
+  if (steps.length === 0) {
+    showToast('Add at least one step with a description', 'error');
+    return;
+  }
+
+  const triggerEl = document.querySelector('input[name="workflow-trigger"]:checked');
+  const trigger = triggerEl ? triggerEl.value : 'manual';
+
+  const workflows = loadWorkflows();
+
+  if (editingWorkflowId) {
+    // Update existing
+    const idx = workflows.findIndex(w => w.id === editingWorkflowId);
+    if (idx !== -1) {
+      workflows[idx].name = name;
+      workflows[idx].trigger = trigger;
+      workflows[idx].steps = steps;
+      workflows[idx].updatedAt = Date.now();
+    }
+  } else {
+    // Create new
+    workflows.push({
+      id: generateWorkflowId(),
+      name,
+      trigger,
+      steps,
+      status: 'idle',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+  }
+
+  saveWorkflows(workflows);
+  closeModal('workflow-modal');
+  renderWorkflowList();
+  showToast(editingWorkflowId ? 'Workflow updated' : 'Workflow created', 'success');
+  editingWorkflowId = null;
+}
+
+/**
+ * Render the workflow list as cards.
+ */
+function renderWorkflowList() {
+  const container = document.getElementById('workflows-list');
+  if (!container) return;
+
+  const workflows = loadWorkflows();
+
+  if (workflows.length === 0) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">&#9889;</span>
+        <p>No workflows yet</p>
+        <p class="empty-hint">Create your first automated workflow</p>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = workflows.map(wf => {
+    const triggerClass = wf.trigger === 'schedule' ? 'trigger-schedule' : 'trigger-manual';
+    const triggerLabel = wf.trigger === 'schedule' ? 'Schedule' : 'Manual';
+    const statusClass = wf.status === 'running' ? 'status-running' : 'status-idle';
+    const statusLabel = wf.status === 'running' ? 'Running' : 'Idle';
+    const stepCount = (wf.steps || []).length;
+    const isRunning = wf.status === 'running';
+
+    return `
+      <div class="workflow-card ${isRunning ? 'running' : ''}" data-workflow-id="${wf.id}">
+        <div class="workflow-card-header">
+          <div class="workflow-card-title">${escapeHtml(wf.name)}</div>
+          <div class="workflow-card-badges">
+            <span class="workflow-badge ${triggerClass}">${triggerLabel}</span>
+            <span class="workflow-badge ${statusClass}">${statusLabel}</span>
+          </div>
+        </div>
+        <div class="workflow-card-meta">
+          <span class="meta-icon">&#128221;</span>
+          <span>${stepCount} step${stepCount !== 1 ? 's' : ''}</span>
+          ${(wf.steps || []).slice(0, 3).map(s =>
+            `<span style="color: var(--text-tertiary);">&middot; ${escapeHtml(s.agent)}</span>`
+          ).join('')}
+        </div>
+        <div class="workflow-progress">
+          <div class="workflow-progress-bar">
+            <div class="workflow-progress-fill" id="wf-progress-${wf.id}" style="width: 0%"></div>
+          </div>
+        </div>
+        <div class="workflow-card-actions">
+          <button class="workflow-action-btn run" data-action="run" data-wf-id="${wf.id}" ${isRunning ? 'disabled' : ''}>
+            ${isRunning ? '&#9203; Running...' : '&#9654; Run'}
+          </button>
+          <button class="workflow-action-btn edit" data-action="edit" data-wf-id="${wf.id}">&#9998; Edit</button>
+          <button class="workflow-action-btn delete" data-action="delete" data-wf-id="${wf.id}">&times; Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Bind card action buttons
+  container.querySelectorAll('.workflow-action-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action;
+      const wfId = btn.dataset.wfId;
+      if (action === 'run') runWorkflow(wfId);
+      else if (action === 'edit') openWorkflowModal(wfId);
+      else if (action === 'delete') deleteWorkflow(wfId);
+    });
+  });
+}
+
+/**
+ * Delete a workflow after confirmation.
+ */
+function deleteWorkflow(workflowId) {
+  if (!confirm('Delete this workflow? This cannot be undone.')) return;
+
+  let workflows = loadWorkflows();
+  workflows = workflows.filter(w => w.id !== workflowId);
+  saveWorkflows(workflows);
+  renderWorkflowList();
+  showToast('Workflow deleted', 'info');
+}
+
+/**
+ * Run a workflow: send to backend via wsManager and track progress.
+ */
+function runWorkflow(workflowId) {
+  const workflows = loadWorkflows();
+  const wf = workflows.find(w => w.id === workflowId);
+  if (!wf) return;
+
+  if (wf.status === 'running') {
+    showToast('Workflow is already running', 'warning');
+    return;
+  }
+
+  // Mark as running
+  wf.status = 'running';
+  saveWorkflows(workflows);
+  renderWorkflowList();
+
+  // Build steps payload
+  const stepsPayload = wf.steps.map((s, i) => ({
+    step: i + 1,
+    description: s.description,
+    agent: s.agent
+  }));
+
+  // Send orchestration task
+  wsManager.send('orchestrate_task', {
+    goal: wf.name,
+    steps: stepsPayload,
+    context: { workflow_id: wf.id }
+  }).then(() => {
+    showToast(`Running workflow: ${wf.name}`, 'info');
+    // Switch to chat view to see orchestration progress
+    switchView('chat');
+    addMessage('assistant', `Orchestrating workflow "${escapeHtml(wf.name)}" (${wf.steps.length} steps)...`, {
+      type: 'orchestration'
+    });
+  }).catch(err => {
+    console.error('Workflow run failed:', err);
+    showToast('Failed to run workflow: ' + err.message, 'error');
+    // Revert status
+    wf.status = 'idle';
+    saveWorkflows(workflows);
+    renderWorkflowList();
+  });
+}
+
+/**
+ * Hook into orchestration progress to update workflow card status.
+ * Called from handleOrchestrationProgress when a workflow_id context is present.
+ */
+function updateWorkflowProgress(event) {
+  const workflowId = event.context && event.context.workflow_id;
+  if (!workflowId) return;
+
+  const workflows = loadWorkflows();
+  const wf = workflows.find(w => w.id === workflowId);
+  if (!wf) return;
+
+  // Update progress bar if workflow card is visible
+  const progressFill = document.getElementById(`wf-progress-${workflowId}`);
+  if (progressFill && event.total) {
+    const pct = Math.round((event.step / event.total) * 100);
+    progressFill.style.width = pct + '%';
+  }
+
+  // If done or failed, reset status
+  if (event.status === 'completed' || event.status === 'done' || event.status === 'failed') {
+    wf.status = 'idle';
+    saveWorkflows(workflows);
+    if (state.currentView === 'workflows') {
+      renderWorkflowList();
+    }
+  }
 }
 
 // Expose functions to window for onclick handlers
