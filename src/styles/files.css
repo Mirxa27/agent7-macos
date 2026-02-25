@@ -1,0 +1,433 @@
+/* ==========================================================================
+   File Manager — Three-panel layout, file tree, preview, breadcrumbs,
+                  drag-and-drop overlay, favorites sidebar
+   ========================================================================== */
+
+/* --- Container: three-panel flex layout --- */
+.files-container {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+/* --- Favorites Sidebar (left panel, 180px) --- */
+.files-sidebar {
+  width: 180px;
+  min-width: 180px;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  padding: var(--spacing-md);
+  overflow-y: auto;
+}
+
+.files-sidebar h4 {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.file-favorites {
+  margin-bottom: var(--spacing-lg);
+}
+
+.favorite-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 13px;
+  transition: var(--transition-fast);
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.favorite-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.favorite-item.active {
+  background: rgba(0, 122, 255, 0.12);
+  color: var(--primary);
+}
+
+/* --- Main file tree area (center, flex:1) --- */
+.files-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* --- Toolbar / Breadcrumb bar --- */
+.files-toolbar {
+  display: flex;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  gap: var(--spacing-sm);
+  min-height: 40px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  flex-wrap: wrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.breadcrumb-item {
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.breadcrumb-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--primary);
+}
+
+.breadcrumb-item:last-child {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.breadcrumb-separator {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  user-select: none;
+  padding: 0 1px;
+}
+
+.breadcrumb-home {
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+  font-size: 14px;
+}
+
+.breadcrumb-home:hover {
+  background: var(--bg-tertiary);
+  color: var(--primary);
+}
+
+/* --- File tree list --- */
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-sm);
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  user-select: none;
+  font-size: 13px;
+}
+
+.file-item:hover {
+  background: var(--bg-secondary);
+}
+
+.file-item.selected {
+  background: rgba(0, 122, 255, 0.1);
+}
+
+.file-item.selected .file-name {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.file-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 1px;
+}
+
+/* Nested children (expanded folder contents) */
+.file-children {
+  margin-left: 20px;
+  border-left: 1px solid var(--border);
+  padding-left: 4px;
+}
+
+/* Folder expand/collapse chevron */
+.folder-chevron {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  transition: transform 0.15s ease;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.folder-chevron.expanded {
+  transform: rotate(90deg);
+}
+
+/* --- Preview panel (right, flex:1) --- */
+.file-preview {
+  flex: 1;
+  min-width: 280px;
+  max-width: 50%;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.file-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-primary);
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.file-preview-header .preview-filename {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.file-preview-header .preview-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+/* Code / text preview */
+.file-preview-code {
+  flex: 1;
+  overflow: auto;
+  padding: 0;
+  margin: 0;
+}
+
+.file-preview-code pre {
+  margin: 0;
+  padding: var(--spacing-md);
+  font-size: 12px;
+  line-height: 1.6;
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace;
+  background: var(--bg-primary) !important;
+  border-radius: 0;
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.file-preview-code pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent !important;
+}
+
+/* Image preview */
+.file-preview-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: var(--spacing-lg);
+  background: var(--bg-primary);
+}
+
+.file-preview-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+/* File info card (for non-previewable files) */
+.file-info-card {
+  padding: var(--spacing-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.file-info-card .info-icon {
+  font-size: 64px;
+  opacity: 0.8;
+}
+
+.file-info-card .info-name {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  word-break: break-all;
+}
+
+.file-info-card .info-table {
+  width: 100%;
+  max-width: 280px;
+}
+
+.file-info-card .info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--divider);
+  font-size: 13px;
+}
+
+.file-info-card .info-row:last-child {
+  border-bottom: none;
+}
+
+.file-info-card .info-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.file-info-card .info-value {
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.file-info-card .info-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+/* --- Drag-and-drop overlay --- */
+.files-drop-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 122, 255, 0.08);
+  border: 2px dashed var(--primary);
+  border-radius: var(--radius-md);
+  z-index: 100;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.files-drop-overlay.visible {
+  display: flex;
+}
+
+.files-drop-overlay-content {
+  text-align: center;
+  color: var(--primary);
+}
+
+.files-drop-overlay-content .drop-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-sm);
+}
+
+.files-drop-overlay-content .drop-text {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.files-drop-overlay-content .drop-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* --- Loading state for file tree --- */
+.file-tree-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+  gap: var(--spacing-sm);
+}
+
+.file-tree-loading .loading-spinner {
+  width: 20px;
+  height: 20px;
+  border-width: 2px;
+}
+
+/* --- Empty state overrides specific to file manager --- */
+.file-tree .empty-state,
+.file-preview .empty-state {
+  padding: var(--spacing-xl);
+}
+
+.file-preview .empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+/* --- Responsive adjustments --- */
+@media (max-width: 900px) {
+  .files-sidebar {
+    width: 0;
+    min-width: 0;
+    padding: 0;
+    overflow: hidden;
+    border-right: none;
+  }
+
+  .file-preview {
+    display: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  .file-preview {
+    min-width: 220px;
+    max-width: 40%;
+  }
+}
