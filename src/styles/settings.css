@@ -1,0 +1,438 @@
+/* ==========================================================================
+   Settings — Tabbed layout, provider sections, show/hide passwords,
+              connection test, sliders, toggles
+   ========================================================================== */
+
+/* --- Settings Container --- */
+.settings-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-xl);
+  max-width: 820px;
+}
+
+/* --- Tab Bar --- */
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  margin-bottom: var(--spacing-lg);
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  text-align: center;
+  font-family: inherit;
+}
+
+.settings-tab:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.settings-tab.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+@media (prefers-color-scheme: dark) {
+  .settings-tab:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+  .settings-tab.active {
+    background: var(--bg-secondary);
+  }
+}
+
+/* --- Tab Panel --- */
+.settings-tab-panel {
+  display: none;
+}
+
+.settings-tab-panel.active {
+  display: block;
+}
+
+/* --- Provider Section (accordion) --- */
+.provider-section {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacing-md);
+  overflow: hidden;
+}
+
+.provider-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) var(--spacing-lg);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+
+.provider-header:hover {
+  background: var(--bg-secondary);
+}
+
+.provider-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.provider-icon {
+  font-size: 20px;
+  width: 28px;
+  text-align: center;
+}
+
+.provider-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.provider-chevron {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast);
+}
+
+.provider-section.expanded .provider-chevron {
+  transform: rotate(90deg);
+}
+
+.provider-body {
+  display: none;
+  padding: 0 var(--spacing-lg) var(--spacing-lg);
+  border-top: 1px solid var(--divider);
+}
+
+.provider-section.expanded .provider-body {
+  display: block;
+}
+
+/* --- Setting Row --- */
+.setting-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-top: var(--spacing-md);
+}
+
+.setting-row label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* --- Password Input Wrapper --- */
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-wrapper input {
+  flex: 1;
+  padding: 10px 42px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  background: var(--bg-secondary);
+  outline: none;
+  font-family: inherit;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.password-input-wrapper input:focus {
+  border-color: var(--primary);
+}
+
+.toggle-visibility-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: var(--text-tertiary);
+  transition: var(--transition-fast);
+}
+
+.toggle-visibility-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* --- Setting Input (non-password) --- */
+.setting-input {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  background: var(--bg-secondary);
+  outline: none;
+  font-family: inherit;
+  color: var(--text-primary);
+  width: 100%;
+}
+
+.setting-input:focus {
+  border-color: var(--primary);
+}
+
+.setting-select {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  background: var(--bg-secondary);
+  outline: none;
+  font-family: inherit;
+  color: var(--text-primary);
+  width: 100%;
+  cursor: pointer;
+}
+
+.setting-select:focus {
+  border-color: var(--primary);
+}
+
+/* --- Test Connection Button --- */
+.test-connection-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  margin-top: var(--spacing-sm);
+  font-family: inherit;
+  align-self: flex-start;
+}
+
+.test-connection-btn:hover {
+  border-color: var(--primary);
+  background: var(--bg-tertiary);
+}
+
+.test-connection-btn.testing {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.test-connection-btn .conn-icon {
+  font-size: 14px;
+}
+
+.test-connection-btn.success {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.test-connection-btn.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* --- Settings Card (for Models, Browser, System tabs) --- */
+.settings-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+}
+
+.settings-card h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--divider);
+}
+
+/* --- Toggle Row --- */
+.setting-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.setting-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.setting-toggle-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-toggle-label .label-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.setting-toggle-label .label-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* --- Slider Row --- */
+.setting-slider-row {
+  padding: var(--spacing-md) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.setting-slider-row:last-child {
+  border-bottom: none;
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-sm);
+}
+
+.slider-header .label-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.slider-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary);
+  min-width: 40px;
+  text-align: right;
+}
+
+.setting-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.setting-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  background: var(--primary);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+
+.setting-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.slider-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* --- Keyboard Shortcuts Display --- */
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-sm) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.shortcut-row:last-child {
+  border-bottom: none;
+}
+
+.shortcut-action {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.shortcut-keys {
+  display: flex;
+  gap: 4px;
+}
+
+.shortcut-key {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: -apple-system, monospace;
+  color: var(--text-secondary);
+}
+
+/* --- Responsive --- */
+@media (max-width: 600px) {
+  .settings-container {
+    padding: var(--spacing-md);
+  }
+
+  .settings-tabs {
+    flex-wrap: wrap;
+  }
+
+  .settings-tab {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .provider-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+  }
+
+  .provider-body {
+    padding: 0 var(--spacing-md) var(--spacing-md);
+  }
+}

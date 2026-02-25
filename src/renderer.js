@@ -138,6 +138,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupFileManager();
   setupVoiceInput();
   setupMemory();
+  setupWorkflows();
 });
 
 // ============================================
@@ -286,19 +287,8 @@ function initializeUI() {
     });
   }
 
-  // Settings navigation
-  document.querySelectorAll('.settings-nav-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const section = item.dataset.settings;
-      switchSettingsSection(section);
-    });
-  });
-
-  // Save settings
-  const saveSettingsBtn = document.getElementById('save-settings');
-  if (saveSettingsBtn) {
-    saveSettingsBtn.addEventListener('click', saveSettings);
-  }
+  // Settings tabs, provider accordions, show/hide, connection test, auto-save
+  setupSettings();
 
   // Modal close buttons
   document.querySelectorAll('.close-modal').forEach(btn => {
@@ -351,18 +341,14 @@ function switchView(viewName) {
     loadMemory();
   } else if (viewName === 'files') {
     refreshFileTree();
+  } else if (viewName === 'workflows') {
+    renderWorkflowList();
+  } else if (viewName === 'settings') {
+    loadSettings();
   }
 }
 
-function switchSettingsSection(section) {
-  document.querySelectorAll('.settings-nav-item').forEach(item => {
-    item.classList.toggle('active', item.dataset.settings === section);
-  });
-
-  document.querySelectorAll('.settings-section').forEach(sec => {
-    sec.classList.toggle('active', sec.id === `${section}-settings`);
-  });
-}
+/* switchSettingsSection removed — replaced by tabbed settings in setupSettings() */
 
 // ============================================
 // Chat Functions
@@ -2886,22 +2872,179 @@ function renderFlowView() {
 }
 
 // ============================================
-// Settings
+// Settings — Tabbed Layout, Auto-Save, Connection Test
 // ============================================
-async function loadSettings() {
-  const keys = [
-    'api_key_openai', 'api_key_anthropic', 'api_key_google',
-    'aws_access_key_id', 'aws_secret_access_key', 'aws_region', 'bedrock_model_id'
-  ];
 
-  for (const key of keys) {
+/**
+ * Wire up everything in the settings view:
+ *  - tab switching
+ *  - provider accordion expand/collapse
+ *  - show/hide password toggle
+ *  - test connection buttons
+ *  - auto-save on every input change
+ */
+function setupSettings() {
+  // --- Tab switching ---
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.settingsTab;
+      document.querySelectorAll('.settings-tab').forEach(t => t.classList.toggle('active', t === tab));
+      document.querySelectorAll('.settings-tab-panel').forEach(p => {
+        p.classList.toggle('active', p.id === `panel-${target}`);
+      });
+    });
+  });
+
+  // --- Provider accordion ---
+  document.querySelectorAll('.provider-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.closest('.provider-section').classList.toggle('expanded');
+    });
+  });
+
+  // --- Show / Hide password ---
+  document.querySelectorAll('.toggle-visibility-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const targetId = btn.dataset.target;
+      const input = document.getElementById(targetId);
+      if (!input) return;
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      // Switch icon: open eye vs closed eye
+      btn.innerHTML = isPassword ? '&#128064;' : '&#128065;';
+    });
+  });
+
+  // --- Test connection buttons ---
+  document.querySelectorAll('.test-connection-btn').forEach(btn => {
+    btn.addEventListener('click', () => testProviderConnection(btn));
+  });
+
+  // --- Auto-save: API key inputs ---
+  const apiKeyFields = [
+    'api-key-openai', 'api-key-anthropic', 'api-key-google',
+    'aws-access-key-id', 'aws-secret-access-key', 'bedrock-model-id'
+  ];
+  apiKeyFields.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('change', () => {
+        const storeKey = id.replace(/-/g, '_');
+        saveSetting(storeKey, el.value);
+      });
+    }
+  });
+
+  // AWS region select
+  const regionEl = document.getElementById('aws-region');
+  if (regionEl) {
+    regionEl.addEventListener('change', () => saveSetting('aws_region', regionEl.value));
+  }
+
+  // --- Models tab auto-save ---
+  const defaultProvider = document.getElementById('settings-default-provider');
+  if (defaultProvider) {
+    defaultProvider.addEventListener('change', () => saveSetting('default_provider', defaultProvider.value));
+  }
+
+  const tempSlider = document.getElementById('settings-temperature');
+  const tempDisplay = document.getElementById('temperature-value');
+  if (tempSlider) {
+    tempSlider.addEventListener('input', () => {
+      if (tempDisplay) tempDisplay.textContent = parseFloat(tempSlider.value).toFixed(1);
+    });
+    tempSlider.addEventListener('change', () => {
+      saveSetting('temperature', tempSlider.value);
+    });
+  }
+
+  // --- Browser tab auto-save ---
+  const headlessToggle = document.getElementById('settings-headless');
+  if (headlessToggle) {
+    headlessToggle.addEventListener('change', () => saveSetting('headless_mode', headlessToggle.checked ? 'true' : 'false'));
+  }
+
+  const timeoutSlider = document.getElementById('settings-timeout');
+  const timeoutDisplay = document.getElementById('timeout-value');
+  if (timeoutSlider) {
+    timeoutSlider.addEventListener('input', () => {
+      if (timeoutDisplay) timeoutDisplay.textContent = timeoutSlider.value + 's';
+    });
+    timeoutSlider.addEventListener('change', () => {
+      saveSetting('browser_timeout', timeoutSlider.value);
+    });
+  }
+
+  // --- System tab auto-save ---
+  const launchLogin = document.getElementById('settings-launch-login');
+  if (launchLogin) {
+    launchLogin.addEventListener('change', () => saveSetting('launch_at_login', launchLogin.checked ? 'true' : 'false'));
+  }
+
+  const notifications = document.getElementById('settings-notifications');
+  if (notifications) {
+    notifications.addEventListener('change', () => saveSetting('show_notifications', notifications.checked ? 'true' : 'false'));
+  }
+}
+
+/**
+ * Persist a single setting and show a brief toast.
+ */
+async function saveSetting(key, value) {
+  try {
+    await ipcRenderer.invoke('settings:set', key, value);
+    localStorage.setItem(key, value);
+    showToast('Setting saved', 'success', 1500);
+  } catch (e) {
+    console.error(`Failed to save setting ${key}:`, e);
+    showToast('Failed to save setting', 'error');
+  }
+}
+
+/**
+ * Load all settings from the main process into the UI.
+ */
+async function loadSettings() {
+  const fieldMap = {
+    'api_key_openai':        'api-key-openai',
+    'api_key_anthropic':     'api-key-anthropic',
+    'api_key_google':        'api-key-google',
+    'aws_access_key_id':     'aws-access-key-id',
+    'aws_secret_access_key': 'aws-secret-access-key',
+    'aws_region':            'aws-region',
+    'bedrock_model_id':      'bedrock-model-id',
+    'default_provider':      'settings-default-provider',
+    'temperature':           'settings-temperature',
+    'headless_mode':         'settings-headless',
+    'browser_timeout':       'settings-timeout',
+    'launch_at_login':       'settings-launch-login',
+    'show_notifications':    'settings-notifications'
+  };
+
+  for (const [key, elementId] of Object.entries(fieldMap)) {
     try {
       const value = await ipcRenderer.invoke('settings:get', key);
-      if (value) {
+      if (value !== null && value !== undefined) {
         localStorage.setItem(key, value);
-        const elementId = key.replace(/_/g, '-');
-        const element = document.getElementById(elementId);
-        if (element) element.value = value;
+        const el = document.getElementById(elementId);
+        if (!el) continue;
+
+        if (el.type === 'checkbox') {
+          el.checked = value === 'true' || value === true;
+        } else if (el.type === 'range') {
+          el.value = value;
+          // Update associated display
+          if (elementId === 'settings-temperature') {
+            const disp = document.getElementById('temperature-value');
+            if (disp) disp.textContent = parseFloat(value).toFixed(1);
+          } else if (elementId === 'settings-timeout') {
+            const disp = document.getElementById('timeout-value');
+            if (disp) disp.textContent = value + 's';
+          }
+        } else {
+          el.value = value;
+        }
       }
     } catch (e) {
       console.error(`Failed to load setting ${key}:`, e);
@@ -2909,27 +3052,66 @@ async function loadSettings() {
   }
 }
 
-async function saveSettings() {
-  const settings = {
-    'api_key_openai': document.getElementById('api-key-openai')?.value || '',
-    'api_key_anthropic': document.getElementById('api-key-anthropic')?.value || '',
-    'api_key_google': document.getElementById('api-key-google')?.value || '',
-    'aws_access_key_id': document.getElementById('aws-access-key-id')?.value || '',
-    'aws_secret_access_key': document.getElementById('aws-secret-access-key')?.value || '',
-    'aws_region': document.getElementById('aws-region')?.value || 'us-east-1',
-    'bedrock_model_id': document.getElementById('bedrock-model-id')?.value || ''
-  };
+/**
+ * Test connection for a specific provider.
+ */
+async function testProviderConnection(btn) {
+  const provider = btn.dataset.provider;
+  if (!provider) return;
 
-  for (const [key, value] of Object.entries(settings)) {
-    try {
-      await ipcRenderer.invoke('settings:set', key, value);
-      localStorage.setItem(key, value);
-    } catch (e) {
-      console.error(`Failed to save setting ${key}:`, e);
-    }
+  // Gather credentials for this provider
+  let apiKeysPayload = {};
+
+  if (provider === 'openai') {
+    const key = document.getElementById('api-key-openai')?.value;
+    if (!key) { showToast('Enter an OpenAI API key first', 'warning'); return; }
+    apiKeysPayload = { openai: key };
+  } else if (provider === 'anthropic') {
+    const key = document.getElementById('api-key-anthropic')?.value;
+    if (!key) { showToast('Enter an Anthropic API key first', 'warning'); return; }
+    apiKeysPayload = { anthropic: key };
+  } else if (provider === 'google') {
+    const key = document.getElementById('api-key-google')?.value;
+    if (!key) { showToast('Enter a Google API key first', 'warning'); return; }
+    apiKeysPayload = { google: key };
+  } else if (provider === 'bedrock') {
+    const accessKey = document.getElementById('aws-access-key-id')?.value;
+    const secretKey = document.getElementById('aws-secret-access-key')?.value;
+    if (!accessKey || !secretKey) { showToast('Enter AWS credentials first', 'warning'); return; }
+    apiKeysPayload = {
+      bedrock: {
+        aws_access_key_id: accessKey,
+        aws_secret_access_key: secretKey,
+        region: document.getElementById('aws-region')?.value || 'us-east-1',
+        model_id: document.getElementById('bedrock-model-id')?.value || ''
+      }
+    };
   }
 
-  showToast('Settings saved successfully', 'success');
+  // Set testing state
+  btn.classList.add('testing');
+  btn.classList.remove('success', 'error');
+  const origHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="conn-icon">&#8987;</span> Testing...';
+
+  try {
+    await wsManager.send('initialize', { api_keys: apiKeysPayload });
+    btn.classList.remove('testing');
+    btn.classList.add('success');
+    btn.innerHTML = '<span class="conn-icon">&#10003;</span> Connected';
+    showToast(`${provider} connected successfully`, 'success');
+  } catch (err) {
+    btn.classList.remove('testing');
+    btn.classList.add('error');
+    btn.innerHTML = '<span class="conn-icon">&#10007;</span> Failed';
+    showToast(`${provider} connection failed: ${err.message || err}`, 'error', 5000);
+  }
+
+  // Reset button after 3 seconds
+  setTimeout(() => {
+    btn.classList.remove('success', 'error');
+    btn.innerHTML = origHTML;
+  }, 3000);
 }
 
 // ============================================

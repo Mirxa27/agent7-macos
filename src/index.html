@@ -12,6 +12,8 @@
   <link rel="stylesheet" href="styles/browser.css">
   <link rel="stylesheet" href="styles/files.css">
   <link rel="stylesheet" href="styles/memory.css">
+  <link rel="stylesheet" href="styles/settings.css">
+  <link rel="stylesheet" href="styles/workflows.css">
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github-dark.min.css">
   <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
@@ -226,6 +228,70 @@
                 <button class="assign-task-btn" id="assign-task-btn">Assign</button>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workflows View -->
+      <div class="view" id="workflows-view">
+        <div class="view-header">
+          <div class="header-title">
+            <h2>Workflows</h2>
+            <p class="header-subtitle">Automate multi-step tasks</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-primary" id="new-workflow-btn">+ New Workflow</button>
+          </div>
+        </div>
+        <div class="workflows-list" id="workflows-list">
+          <div class="empty-state">
+            <span class="empty-icon">&#9889;</span>
+            <p>No workflows yet</p>
+            <p class="empty-hint">Create your first automated workflow</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Workflow Create/Edit Modal -->
+      <div class="modal workflow-modal" id="workflow-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="workflow-modal-title">New Workflow</h3>
+            <button class="close-modal" onclick="closeModal('workflow-modal')">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="workflow-name">Name</label>
+              <input type="text" id="workflow-name" placeholder="e.g. Daily Research Report">
+            </div>
+            <div class="form-group">
+              <label>Trigger</label>
+              <div class="trigger-group">
+                <div class="trigger-option">
+                  <input type="radio" name="workflow-trigger" id="trigger-manual" value="manual" checked>
+                  <label for="trigger-manual">
+                    <span class="trigger-icon">&#9654;</span>
+                    Manual
+                  </label>
+                </div>
+                <div class="trigger-option">
+                  <input type="radio" name="workflow-trigger" id="trigger-schedule" value="schedule">
+                  <label for="trigger-schedule">
+                    <span class="trigger-icon">&#128339;</span>
+                    Schedule
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="step-editor-label">Steps</label>
+              <div class="step-list" id="step-list"></div>
+              <button class="add-step-btn" id="add-step-btn">+ Add Step</button>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeModal('workflow-modal')">Cancel</button>
+            <button class="btn-primary" id="save-workflow-btn">Save Workflow</button>
           </div>
         </div>
       </div>
@@ -459,17 +525,250 @@
           <h2>Settings</h2>
         </div>
         <div class="settings-container">
-          <div class="settings-section">
-            <h3>API Keys</h3>
-            <div class="setting-item">
-              <label>OpenAI API Key</label>
-              <input type="password" id="api-key-openai" placeholder="sk-...">
+          <!-- Tab Bar -->
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-settings-tab="api-keys">API Keys</button>
+            <button class="settings-tab" data-settings-tab="models">Models</button>
+            <button class="settings-tab" data-settings-tab="browser-settings">Browser</button>
+            <button class="settings-tab" data-settings-tab="system">System</button>
+          </div>
+
+          <!-- ===== API Keys Tab ===== -->
+          <div class="settings-tab-panel active" id="panel-api-keys">
+            <!-- OpenAI -->
+            <div class="provider-section expanded" data-provider="openai">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🟢</span>
+                  <span class="provider-name">OpenAI</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-openai" placeholder="sk-..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-openai" title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="openai">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
             </div>
-            <div class="setting-item">
-              <label>Anthropic API Key</label>
-              <input type="password" id="api-key-anthropic" placeholder="sk-...">
+
+            <!-- Anthropic -->
+            <div class="provider-section" data-provider="anthropic">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🟠</span>
+                  <span class="provider-name">Anthropic</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-anthropic" placeholder="sk-ant-..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-anthropic" title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="anthropic">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
+            </div>
+
+            <!-- Google -->
+            <div class="provider-section" data-provider="google">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🔵</span>
+                  <span class="provider-name">Google</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-google" placeholder="AIza..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-google" title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="google">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
+            </div>
+
+            <!-- AWS Bedrock -->
+            <div class="provider-section" data-provider="bedrock">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">&#9729;&#65039;</span>
+                  <span class="provider-name">AWS Bedrock</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>Access Key ID</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="aws-access-key-id" placeholder="AKIA..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="aws-access-key-id" title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label>Secret Access Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="aws-secret-access-key" placeholder="Secret key..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="aws-secret-access-key" title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label>Region</label>
+                  <select class="setting-select" id="aws-region">
+                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                    <option value="us-west-2">us-west-2 (Oregon)</option>
+                    <option value="eu-west-1">eu-west-1 (Ireland)</option>
+                    <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <label>Model ID</label>
+                  <input type="text" class="setting-input" id="bedrock-model-id" placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0">
+                </div>
+                <button class="test-connection-btn" data-provider="bedrock">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
             </div>
           </div>
+
+          <!-- ===== Models Tab ===== -->
+          <div class="settings-tab-panel" id="panel-models">
+            <div class="settings-card">
+              <h3>Model Configuration</h3>
+              <div class="setting-row">
+                <label>Default Provider</label>
+                <select class="setting-select" id="settings-default-provider">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google</option>
+                  <option value="bedrock">AWS Bedrock</option>
+                </select>
+              </div>
+              <div class="setting-slider-row">
+                <div class="slider-header">
+                  <span class="label-title">Temperature</span>
+                  <span class="slider-value" id="temperature-value">0.3</span>
+                </div>
+                <input type="range" class="setting-slider" id="settings-temperature"
+                       min="0" max="1" step="0.1" value="0.3">
+                <div class="slider-desc">Controls randomness. Lower values make output more focused and deterministic.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== Browser Tab ===== -->
+          <div class="settings-tab-panel" id="panel-browser-settings">
+            <div class="settings-card">
+              <h3>Browser Configuration</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Headless Mode</span>
+                  <span class="label-desc">Run browser automation without visible window</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-headless">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-slider-row">
+                <div class="slider-header">
+                  <span class="label-title">Default Timeout</span>
+                  <span class="slider-value" id="timeout-value">30s</span>
+                </div>
+                <input type="range" class="setting-slider" id="settings-timeout"
+                       min="10" max="120" step="5" value="30">
+                <div class="slider-desc">Maximum wait time for browser operations (10-120 seconds)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== System Tab ===== -->
+          <div class="settings-tab-panel" id="panel-system">
+            <div class="settings-card">
+              <h3>General</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Launch at Login</span>
+                  <span class="label-desc">Automatically start Agent7 when you log in</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-launch-login">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Show Notifications</span>
+                  <span class="label-desc">Display system notifications for task completions</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-notifications" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h3>Keyboard Shortcuts</h3>
+              <div class="shortcuts-list">
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Send Message</span>
+                  <div class="shortcut-keys">
+                    <span class="shortcut-key">&#8984;</span>
+                    <span class="shortcut-key">Enter</span>
+                  </div>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">New Task</span>
+                  <div class="shortcut-keys">
+                    <span class="shortcut-key">&#8984;</span>
+                    <span class="shortcut-key">N</span>
+                  </div>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Quick Task</span>
+                  <div class="shortcut-keys">
+                    <span class="shortcut-key">&#8984;</span>
+                    <span class="shortcut-key">Shift</span>
+                    <span class="shortcut-key">K</span>
+                  </div>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Screenshot</span>
+                  <div class="shortcut-keys">
+                    <span class="shortcut-key">&#8984;</span>
+                    <span class="shortcut-key">Shift</span>
+                    <span class="shortcut-key">S</span>
+                  </div>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Toggle Autonomous</span>
+                  <div class="shortcut-keys">
+                    <span class="shortcut-key">&#8984;</span>
+                    <span class="shortcut-key">Shift</span>
+                    <span class="shortcut-key">A</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </main>
