@@ -46,3 +46,7 @@ class TestBrowserConfig:
         assert "target closed" in config.retryable_errors
         assert "navigation failed" in config.retryable_errors
         assert "element is detached" in config.retryable_errors
+        assert "frame was detached" in config.retryable_errors
+        assert "execution context was destroyed" in config.retryable_errors
+        assert "connection refused" in config.retryable_errors
+        assert "net::ERR_CONNECTION_RESET" in config.retryable_errors
