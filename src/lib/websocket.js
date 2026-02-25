@@ -41,6 +41,38 @@ class WebSocketManager {
   }
 
   /**
+   * Returns a Promise that resolves once the WebSocket reaches OPEN state.
+   * Rejects with a timeout error if the connection isn't established within
+   * `timeoutMs` milliseconds (default 10 s).
+   */
+  waitForConnection(timeoutMs = 10000) {
+    return new Promise((resolve, reject) => {
+      if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+        resolve();
+        return;
+      }
+
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          unsubscribe();
+          reject(new Error('Backend is not running. Please start the Python backend and try again.'));
+        }
+      }, timeoutMs);
+
+      const unsubscribe = window.appState.on('wsConnected', (connected) => {
+        if (connected && !settled) {
+          settled = true;
+          clearTimeout(timer);
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
    * Send an RPC-style message and return a Promise that resolves with the
    * response payload (or rejects on error / timeout).
    */

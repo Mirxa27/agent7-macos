@@ -16,9 +16,23 @@ from enum import Enum
 import logging
 
 # Advanced imports
-from browser_use import Agent, Browser, BrowserConfig, Controller
-from browser_use.browser.context import BrowserContext
-from browser_use.agent.views import ActionResult
+try:
+    from browser_use import Agent, Browser
+except ImportError:
+    # Fallback for newer browser_use versions
+    from browser_use import Agent
+    from browser_use.browser.session import BrowserSession as Browser
+try:
+    from browser_use.browser.context import BrowserContext
+except ImportError:
+    BrowserContext = None
+try:
+    from browser_use.agent.views import ActionResult
+except ImportError:
+    ActionResult = None
+# BrowserConfig removed in newer versions - use Browser/Agent kwargs instead
+BrowserConfig = None
+Controller = None
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -608,7 +622,7 @@ class Agent7Server:
             }
             await websocket.send(json.dumps(error_response))
 
-    async def handler(self, websocket, path):
+    async def handler(self, websocket, path=None):
         """WebSocket connection handler"""
         await self.register_client(websocket)
         try:
@@ -619,10 +633,45 @@ class Agent7Server:
         finally:
             await self.unregister_client(websocket)
 
+    async def _process_http_request(self, connection, request):
+        """Handle HTTP requests gracefully before WebSocket handshake.
+        
+        websockets 14+ signature: process_request(connection, request) -> Response | None
+        """
+        from websockets.http11 import Response
+        
+        path = request.path
+        
+        # For favicon.ico, return 204 No Content
+        if path == "/favicon.ico":
+            return Response(
+                status_code=204,
+                reason_phrase="No Content",
+                headers=[(b"Connection", b"close")],
+                body=b""
+            )
+        
+        # Return simple HTML for other HTTP requests
+        body = b"<!DOCTYPE html><html><head><title>Agent7 Backend</title></head><body><h1>Agent7 WebSocket Server</h1><p>Status: Running &#9989;</p><p>This is a WebSocket endpoint. Connect using ws://localhost:8765</p></body></html>"
+        return Response(
+            status_code=200,
+            reason_phrase="OK",
+            headers=[
+                (b"Content-Type", b"text/html; charset=utf-8"),
+                (b"Connection", b"close")
+            ],
+            body=body
+        )
+
     async def start(self):
-        """Start WebSocket server"""
+        """Start WebSocket server with HTTP fallback support."""
         logger.info(f"Starting Agent7 server on ws://{self.host}:{self.port}")
-        async with websockets.serve(self.handler, self.host, self.port):
+        async with websockets.serve(
+            self.handler, 
+            self.host, 
+            self.port,
+            process_request=self._process_http_request
+        ):
             await asyncio.Future()  # Run forever
 
 

@@ -38,16 +38,16 @@ class Agent7Core {
 
   async executeTask(task) {
     log.info('Executing task:', task);
-    
+
     // Plan the task
     const plan = await this.planner.createPlan(task);
-    
+
     // Execute with orchestration
     const result = await this.orchestrator.executePlan(plan);
-    
+
     // Store in memory
     await this.memory.storeTask(task, plan, result);
-    
+
     return result;
   }
 
@@ -130,16 +130,16 @@ class TaskPlanner {
 
   async createPlan(task) {
     log.info('Creating plan for task:', task);
-    
+
     // Decompose task into sub-tasks
     const subTasks = await this.decomposeTask(task);
-    
+
     // Determine dependencies
     const dependencies = this.analyzeDependencies(subTasks);
-    
+
     // Assign to agents
     const assignments = this.assignAgents(subTasks);
-    
+
     return {
       task,
       subTasks,
@@ -197,7 +197,7 @@ Provide 3-7 sub-tasks that can be executed sequentially or in parallel.`;
       'code': 'coder',
       'file': 'file_manager'
     };
-    
+
     return agentTypes[task.type] || 'general';
   }
 }
@@ -233,10 +233,10 @@ class AgentOrchestrator {
 
   async executePlan(plan) {
     log.info('Executing plan:', plan.task);
-    
+
     const results = [];
     const completed = new Set();
-    
+
     // Execute sub-tasks in dependency order
     for (const subTask of plan.assignments) {
       if (this.canExecute(subTask, completed, plan.dependencies)) {
@@ -246,7 +246,7 @@ class AgentOrchestrator {
         completed.add(subTask.id);
       }
     }
-    
+
     // Aggregate results
     return this.aggregateResults(results);
   }
@@ -278,14 +278,14 @@ class SpecializedAgent {
   async execute(task) {
     log.info(`Agent ${this.name} executing:`, task.description);
     this.status = 'busy';
-    
+
     try {
       // Execute based on agent type
       const result = await this.executeByType(task);
-      
+
       this.history.push({ task, result, timestamp: Date.now() });
       this.status = 'idle';
-      
+
       return {
         success: true,
         agent: this.name,
@@ -347,14 +347,14 @@ class WorkflowEngine {
   async runWorkflow(name, context = {}) {
     const workflow = this.workflows.get(name);
     if (!workflow) throw new Error(`Workflow ${name} not found`);
-    
+
     log.info(`Running workflow: ${name}`);
     workflow.runs++;
-    
+
     for (const step of workflow.steps) {
       await this.executeStep(step, context);
     }
-    
+
     return { success: true, workflow: name };
   }
 
@@ -377,9 +377,11 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      enableRemoteModule: true
+      enableRemoteModule: true,
+      webviewTag: true,
+      webSecurity: false
     },
-    icon: path.join(__dirname, '../assets/icon.png'),
+    icon: path.join(__dirname, '../assets/logo.png'),
     show: false
   });
 
@@ -389,7 +391,7 @@ async function createWindow() {
   // Show when ready
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    
+
     // Check for updates if autoUpdater is available
     if (autoUpdater) {
       autoUpdater.checkForUpdatesAndNotify();
@@ -406,36 +408,44 @@ async function createWindow() {
 }
 
 function createTray() {
-  const iconPath = path.join(__dirname, '../assets/trayIconTemplate.png');
-  const trayIcon = nativeImage.createFromPath(iconPath);
+  const iconPath = path.join(__dirname, '../assets/logo.png');
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
   tray = new Tray(trayIcon);
-  
+
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Agent7', click: () => mainWindow.show() },
-    { label: 'New Task', click: () => {
-      mainWindow.show();
-      mainWindow.webContents.send('new-task');
-    }},
+    {
+      label: 'New Task', click: () => {
+        mainWindow.show();
+        mainWindow.webContents.send('new-task');
+      }
+    },
     { type: 'separator' },
-    { label: 'Autonomous Mode', type: 'checkbox', checked: false, click: (menuItem) => {
-      agent7.autonomous = menuItem.checked;
-      mainWindow.webContents.send('autonomous-changed', agent7.autonomous);
-    }},
+    {
+      label: 'Autonomous Mode', type: 'checkbox', checked: false, click: (menuItem) => {
+        agent7.autonomous = menuItem.checked;
+        mainWindow.webContents.send('autonomous-changed', agent7.autonomous);
+      }
+    },
     { type: 'separator' },
-    { label: 'Preferences...', click: () => {
-      mainWindow.show();
-      mainWindow.webContents.send('show-preferences');
-    }},
+    {
+      label: 'Preferences...', click: () => {
+        mainWindow.show();
+        mainWindow.webContents.send('show-preferences');
+      }
+    },
     { type: 'separator' },
-    { label: 'Quit', click: () => {
-      isQuitting = true;
-      app.quit();
-    }}
+    {
+      label: 'Quit', click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
   ]);
-  
+
   tray.setToolTip('Agent7');
   tray.setContextMenu(contextMenu);
-  
+
   tray.on('click', () => {
     mainWindow.isVisible() ? mainWindow.hide() : mainWindow.show();
   });
@@ -455,24 +465,88 @@ function registerGlobalShortcuts() {
 }
 
 async function startPythonBackend() {
-  const pythonPath = path.join(__dirname, '../python-backend');
-  
-  pythonBackend = spawn('python3', ['server.py'], {
-    cwd: pythonPath,
-    env: { ...process.env, PYTHONPATH: pythonPath }
+  // Resolve the python-backend directory — works in both dev and packaged app
+  const isDev = !app.isPackaged;
+  const backendDir = isDev
+    ? path.join(__dirname, '../python-backend')
+    : path.join(process.resourcesPath, 'python-backend');
+
+  // Locate the venv Python — prefer the bundled .venv, fall back to pyenv 3.12
+  const venvCandidates = [
+    path.join(backendDir, '.venv/bin/python3'),
+    path.join(__dirname, '../python-backend/.venv/bin/python3'),
+    path.join(process.env.HOME || '/Users/am', '.pyenv/versions/3.12.12/bin/python3'),
+  ];
+
+  const fs = require('fs');
+  let pythonExec = 'python3'; // last-resort fallback
+  for (const candidate of venvCandidates) {
+    if (fs.existsSync(candidate)) {
+      pythonExec = candidate;
+      break;
+    }
+  }
+
+  log.info(`Starting Python backend with: ${pythonExec}`);
+  log.info(`Backend directory: ${backendDir}`);
+
+  pythonBackend = spawn(pythonExec, ['server.py'], {
+    cwd: backendDir,
+    env: {
+      ...process.env,
+      PYTHONPATH: backendDir,
+      PYTHONUNBUFFERED: '1',
+    }
   });
 
   pythonBackend.stdout.on('data', (data) => {
-    log.info(`Python: ${data}`);
+    log.info(`[Backend] ${data.toString().trim()}`);
   });
 
   pythonBackend.stderr.on('data', (data) => {
-    log.error(`Python Error: ${data}`);
+    log.error(`[Backend ERR] ${data.toString().trim()}`);
   });
 
-  // Wait for backend to start
-  await new Promise(resolve => setTimeout(resolve, 3000));
-  log.info('Python backend started');
+  pythonBackend.on('error', (err) => {
+    log.error('Failed to start Python backend:', err);
+    if (mainWindow) {
+      mainWindow.webContents.send('backend-error', err.message);
+    }
+  });
+
+  pythonBackend.on('exit', (code, signal) => {
+    log.warn(`Python backend exited: code=${code} signal=${signal}`);
+    if (!isQuitting && code !== 0) {
+      // Auto-restart after 3 seconds on unexpected exit
+      log.info('Restarting Python backend in 3s...');
+      setTimeout(() => startPythonBackend(), 3000);
+    }
+  });
+
+  // Poll until the WebSocket server is accepting connections (up to 30s)
+  const net = require('net');
+  const waitForServer = (host, port, retries = 30, delay = 1000) =>
+    new Promise((resolve) => {
+      const attempt = () => {
+        const socket = net.connect(port, host, () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.on('error', () => {
+          socket.destroy();
+          if (retries-- > 0) {
+            setTimeout(attempt, delay);
+          } else {
+            log.warn('Python backend did not start in time — continuing anyway');
+            resolve(false);
+          }
+        });
+      };
+      attempt();
+    });
+
+  const ready = await waitForServer('localhost', 8765);
+  log.info(`Python backend ${ready ? 'ready on port 8765' : 'timed out — check logs'}`);
 }
 
 async function callPythonBackend(method, params) {
@@ -539,6 +613,79 @@ ipcMain.handle('settings:get', async (event, key) => {
 
 ipcMain.handle('settings:set', async (event, key, value) => {
   store.set(key, value);
+});
+
+// File Manager IPC Handlers
+ipcMain.handle('files:list', async (event, folderPath) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    // Expand ~ to home directory
+    const expandedPath = folderPath.startsWith('~')
+      ? path.join(require('os').homedir(), folderPath.slice(1))
+      : folderPath;
+
+    const items = await fs.readdir(expandedPath, { withFileTypes: true });
+
+    const files = await Promise.all(items.map(async (item) => {
+      const itemPath = path.join(expandedPath, item.name);
+      const stats = await fs.stat(itemPath);
+
+      return {
+        name: item.name,
+        path: itemPath,
+        type: item.isDirectory() ? 'directory' : 'file',
+        size: stats.size,
+        modified: stats.mtime
+      };
+    }));
+
+    return files.sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'directory' ? -1 : 1;
+    });
+  } catch (error) {
+    log.error('Failed to list directory:', error);
+    return [];
+  }
+});
+
+ipcMain.handle('files:read', async (event, filePath) => {
+  try {
+    const fs = require('fs').promises;
+    const content = await fs.readFile(filePath, 'utf-8');
+    return content;
+  } catch (error) {
+    log.error('Failed to read file:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('files:createFolder', async (event, parentPath, name) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const newPath = path.join(parentPath, name);
+    await fs.mkdir(newPath);
+    return newPath;
+  } catch (error) {
+    log.error('Failed to create folder:', error);
+    throw error;
+  }
+});
+
+ipcMain.handle('files:createFile', async (event, parentPath, name) => {
+  try {
+    const fs = require('fs').promises;
+    const path = require('path');
+    const newPath = path.join(parentPath, name);
+    await fs.writeFile(newPath, '');
+    return newPath;
+  } catch (error) {
+    log.error('Failed to create file:', error);
+    throw error;
+  }
 });
 
 // App Event Handlers

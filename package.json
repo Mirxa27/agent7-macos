@@ -25,23 +25,54 @@
     "files": [
       "src/**/*",
       "assets/**/*",
-      "python-backend/**/*",
-      "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules_old/**",
+      "!python-backend/.venv/**",
+      "!python-backend/__pycache__/**",
+      "!python-backend/.pytest_cache/**",
+      "!python-backend/tests/**"
+    ],
+    "extraResources": [
+      {
+        "from": "python-backend",
+        "to": "python-backend",
+        "filter": [
+          "**/*",
+          "!__pycache__/**",
+          "!.pytest_cache/**",
+          "!tests/**",
+          "!.venv/**"
+        ]
+      },
+      {
+        "from": "python-backend/.venv",
+        "to": "python-backend/.venv",
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "icon": "assets/icon.icns",
+      "icon": "assets/logo.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.plist",

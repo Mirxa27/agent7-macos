@@ -1401,7 +1401,7 @@ function executeBrowserClick(selector) {
   });
 
   // Also send to backend for recording / more advanced automation
-  wsManager.send('browser_click', { selector }).catch(() => {});
+  wsManager.send('browser_click', { selector }).catch(() => { });
 }
 
 function executeBrowserType(selector, text) {
@@ -1431,7 +1431,7 @@ function executeBrowserType(selector, text) {
     showToast('Type failed: ' + err.message, 'error');
   });
 
-  wsManager.send('browser_type', { selector, text }).catch(() => {});
+  wsManager.send('browser_type', { selector, text }).catch(() => { });
 }
 
 function executeBrowserExtract(selector) {
@@ -1457,7 +1457,7 @@ function executeBrowserExtract(selector) {
     showToast('Extract failed: ' + err.message, 'error');
   });
 
-  wsManager.send('browser_extract', { selector: selector || 'body' }).catch(() => {});
+  wsManager.send('browser_extract', { selector: selector || 'body' }).catch(() => { });
 }
 
 function executeBrowserAutoTask(task) {
@@ -1509,7 +1509,7 @@ function scrollPage() {
   if (webview) {
     webview.executeJavaScript(`
       window.scrollBy({ top: window.innerHeight / 2, behavior: 'smooth' });
-    `).catch(() => {});
+    `).catch(() => { });
     showToast('Page scrolled', 'info');
   }
 }
@@ -2310,7 +2310,7 @@ async function performMemorySearch(query) {
   try {
     const response = await wsManager.send('memory_search', { query });
     state.memory.searchResults = Array.isArray(response) ? response :
-                                 (response && Array.isArray(response.results)) ? response.results : [];
+      (response && Array.isArray(response.results)) ? response.results : [];
   } catch (err) {
     console.error('Memory search failed:', err);
     state.memory.searchResults = [];
@@ -2442,7 +2442,7 @@ function toggleMemoryDetail(card, idx) {
 
   // Task steps (if available)
   const steps = Array.isArray(result.steps) ? result.steps :
-                (typeof result.steps === 'string' ? result.steps.split('\n').filter(Boolean) : []);
+    (typeof result.steps === 'string' ? result.steps.split('\n').filter(Boolean) : []);
   if (steps.length > 0) {
     detailsHTML += `
       <div class="detail-section">
@@ -3010,19 +3010,19 @@ async function saveSetting(key, value) {
  */
 async function loadSettings() {
   const fieldMap = {
-    'api_key_openai':        'api-key-openai',
-    'api_key_anthropic':     'api-key-anthropic',
-    'api_key_google':        'api-key-google',
-    'aws_access_key_id':     'aws-access-key-id',
+    'api_key_openai': 'api-key-openai',
+    'api_key_anthropic': 'api-key-anthropic',
+    'api_key_google': 'api-key-google',
+    'aws_access_key_id': 'aws-access-key-id',
     'aws_secret_access_key': 'aws-secret-access-key',
-    'aws_region':            'aws-region',
-    'bedrock_model_id':      'bedrock-model-id',
-    'default_provider':      'settings-default-provider',
-    'temperature':           'settings-temperature',
-    'headless_mode':         'settings-headless',
-    'browser_timeout':       'settings-timeout',
-    'launch_at_login':       'settings-launch-login',
-    'show_notifications':    'settings-notifications'
+    'aws_region': 'aws-region',
+    'bedrock_model_id': 'bedrock-model-id',
+    'default_provider': 'settings-default-provider',
+    'temperature': 'settings-temperature',
+    'headless_mode': 'settings-headless',
+    'browser_timeout': 'settings-timeout',
+    'launch_at_login': 'settings-launch-login',
+    'show_notifications': 'settings-notifications'
   };
 
   for (const [key, elementId] of Object.entries(fieldMap)) {
@@ -3095,9 +3095,12 @@ async function testProviderConnection(btn) {
   btn.classList.add('testing');
   btn.classList.remove('success', 'error');
   const origHTML = btn.innerHTML;
-  btn.innerHTML = '<span class="conn-icon">&#8987;</span> Testing...';
+  btn.innerHTML = '<span class="conn-icon">&#8987;</span> Connecting...';
 
   try {
+    // Wait for the WS connection before sending (backend may still be starting)
+    await wsManager.waitForConnection(10000);
+    btn.innerHTML = '<span class="conn-icon">&#8987;</span> Testing...';
     await wsManager.send('initialize', { api_keys: apiKeysPayload });
     btn.classList.remove('testing');
     btn.classList.add('success');
@@ -3107,7 +3110,17 @@ async function testProviderConnection(btn) {
     btn.classList.remove('testing');
     btn.classList.add('error');
     btn.innerHTML = '<span class="conn-icon">&#10007;</span> Failed';
-    showToast(`${provider} connection failed: ${err.message || err}`, 'error', 5000);
+
+    // Distinguish between backend not running vs credential failure
+    if (err.message && err.message.includes('WebSocket is not connected')) {
+      showToast(
+        'Backend server not running. Start it with: cd python-backend && python3 server.py',
+        'error',
+        8000
+      );
+    } else {
+      showToast(`${provider} connection failed: ${err.message || err}`, 'error', 5000);
+    }
   }
 
   // Reset button after 3 seconds
@@ -3116,6 +3129,7 @@ async function testProviderConnection(btn) {
     btn.innerHTML = origHTML;
   }, 3000);
 }
+
 
 // ============================================
 // Utilities
@@ -3359,8 +3373,8 @@ function renderModalSteps() {
         >
         <select class="step-agent-select" data-step-idx="${idx}">
           ${agentOptions.map(a =>
-            `<option value="${a}" ${step.agent === a ? 'selected' : ''}>${a}</option>`
-          ).join('')}
+    `<option value="${a}" ${step.agent === a ? 'selected' : ''}>${a}</option>`
+  ).join('')}
         </select>
       </div>
       <button class="step-delete-btn" data-step-idx="${idx}" title="Remove step">&times;</button>
@@ -3541,8 +3555,8 @@ function renderWorkflowList() {
           <span class="meta-icon">&#128221;</span>
           <span>${stepCount} step${stepCount !== 1 ? 's' : ''}</span>
           ${(wf.steps || []).slice(0, 3).map(s =>
-            `<span style="color: var(--text-tertiary);">&middot; ${escapeHtml(s.agent)}</span>`
-          ).join('')}
+      `<span style="color: var(--text-tertiary);">&middot; ${escapeHtml(s.agent)}</span>`
+    ).join('')}
         </div>
         <div class="workflow-progress">
           <div class="workflow-progress-bar">
