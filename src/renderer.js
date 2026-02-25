@@ -112,6 +112,7 @@ function handleWebSocketMessage(data) {
 // ============================================
 document.addEventListener('DOMContentLoaded', () => {
   initializeUI();
+  setupSidebar();
 
   // Connect to backend via wsManager; initialise once connected
   appState.on('wsConnected', (connected) => {
@@ -127,6 +128,68 @@ document.addEventListener('DOMContentLoaded', () => {
   setupVoiceInput();
   setupMemory();
 });
+
+// ============================================
+// Sidebar Collapse / Expand / Drawer Logic
+// ============================================
+function setupSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const collapseBtn = document.getElementById('sidebar-collapse');
+  const hamburgerToggle = document.getElementById('hamburger-toggle');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  if (!sidebar) return;
+
+  // --- Set title attributes on nav items for collapsed tooltip ---
+  document.querySelectorAll('.nav-item').forEach(item => {
+    const labelSpan = item.querySelector('span:not(.nav-icon):not(.badge)');
+    if (labelSpan) {
+      item.setAttribute('title', labelSpan.textContent.trim());
+    }
+  });
+
+  // --- Restore saved collapsed state ---
+  if (localStorage.getItem('sidebarCollapsed') === 'true') {
+    sidebar.classList.add('collapsed');
+    if (collapseBtn) collapseBtn.textContent = '\u203A'; // ›
+  }
+
+  // --- Collapse button (wide screens) ---
+  if (collapseBtn) {
+    collapseBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('collapsed');
+      const isCollapsed = sidebar.classList.contains('collapsed');
+      localStorage.setItem('sidebarCollapsed', isCollapsed ? 'true' : 'false');
+      collapseBtn.textContent = isCollapsed ? '\u203A' : '\u2039'; // › or ‹
+    });
+  }
+
+  // --- Hamburger toggle (narrow screens, drawer mode) ---
+  if (hamburgerToggle) {
+    hamburgerToggle.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+      if (sidebarOverlay) sidebarOverlay.classList.toggle('visible');
+    });
+  }
+
+  // --- Sidebar overlay click closes drawer ---
+  if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', () => {
+      sidebar.classList.remove('open');
+      sidebarOverlay.classList.remove('visible');
+    });
+  }
+
+  // --- Close drawer when nav item clicked on narrow screens ---
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      if (window.innerWidth < 900) {
+        sidebar.classList.remove('open');
+        if (sidebarOverlay) sidebarOverlay.classList.remove('visible');
+      }
+    });
+  });
+}
 
 function initializeUI() {
   // Navigation

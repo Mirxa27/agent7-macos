@@ -17,14 +17,17 @@
   flex-direction: column;
   padding: var(--spacing-md);
   -webkit-app-region: drag;
-  transition: width var(--transition-normal);
+  transition: width 0.25s ease;
   flex-shrink: 0;
   overflow: hidden;
   z-index: 100;
 }
 
 .sidebar-header {
-  margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
   -webkit-app-region: no-drag;
 }
 
@@ -32,7 +35,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
 }
 
 .logo-icon {
@@ -54,6 +56,36 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   white-space: nowrap;
+}
+
+/* --- Sidebar Collapse Button --- */
+.sidebar-collapse-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-collapse-btn:hover {
+  background: var(--bg-tertiary, var(--bg-secondary));
+  color: var(--text-primary);
+}
+
+/* --- Sidebar Auto-Toggle Row --- */
+.sidebar-auto-toggle {
+  margin-bottom: var(--spacing-md);
+  -webkit-app-region: no-drag;
 }
 
 .autonomous-toggle {
@@ -148,7 +180,16 @@
 .sidebar.collapsed .badge,
 .sidebar.collapsed .toggle-label,
 .sidebar.collapsed .status-text,
-.sidebar.collapsed .autonomous-toggle {
+.sidebar.collapsed .autonomous-toggle,
+.sidebar.collapsed .sidebar-auto-toggle {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-collapse-btn {
   display: none;
 }
 
@@ -159,7 +200,6 @@
 
 .sidebar.collapsed .logo {
   justify-content: center;
-  margin-bottom: var(--spacing-sm);
 }
 
 .sidebar.collapsed .connection-status {
@@ -268,7 +308,11 @@
   -webkit-app-region: no-drag;
 }
 
-.hamburger-bar .logo-text {
+.hamburger-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.hamburger-title {
   font-size: 16px;
   font-weight: 700;
   background: linear-gradient(135deg, var(--primary), var(--info));
@@ -281,12 +325,15 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.4);
-  z-index: 99;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 150;
+  opacity: 0;
+  transition: opacity 0.25s ease;
 }
 
-.sidebar-overlay.active {
+.sidebar-overlay.visible {
   display: block;
+  opacity: 1;
 }
 
 /* ==========================================================================
@@ -298,7 +345,7 @@
    This is the default state — no media query needed.
    ========================================================================== */
 
-/* --- Medium: 900px – 1200px ---
+/* --- Medium: 900px - 1200px ---
    Collapsed sidebar (60px, icons only), overlay panels
    ========================================================================== */
 @media (max-width: 1200px) {
@@ -312,7 +359,16 @@
   .sidebar .badge,
   .sidebar .toggle-label,
   .sidebar .status-text,
-  .sidebar .autonomous-toggle {
+  .sidebar .autonomous-toggle,
+  .sidebar .sidebar-auto-toggle {
+    display: none;
+  }
+
+  .sidebar .sidebar-header {
+    justify-content: center;
+  }
+
+  .sidebar .sidebar-collapse-btn {
     display: none;
   }
 
@@ -323,7 +379,6 @@
 
   .sidebar .logo {
     justify-content: center;
-    margin-bottom: var(--spacing-sm);
   }
 
   .sidebar .connection-status {
@@ -362,6 +417,7 @@
     z-index: 200;
     box-shadow: var(--shadow-lg);
     transform: translateX(-100%);
+    transition: transform 0.25s ease;
   }
 
   /* Restore full sidebar labels when it slides open as a drawer */
@@ -370,8 +426,17 @@
   .sidebar .badge,
   .sidebar .toggle-label,
   .sidebar .status-text,
-  .sidebar .autonomous-toggle {
+  .sidebar .autonomous-toggle,
+  .sidebar .sidebar-auto-toggle {
     display: revert;
+  }
+
+  .sidebar .sidebar-header {
+    justify-content: space-between;
+  }
+
+  .sidebar .sidebar-collapse-btn {
+    display: none;
   }
 
   .sidebar .nav-item {
@@ -381,7 +446,6 @@
 
   .sidebar .logo {
     justify-content: flex-start;
-    margin-bottom: var(--spacing-md);
   }
 
   .sidebar .connection-status {

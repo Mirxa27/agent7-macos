@@ -15,8 +15,8 @@
   <div class="toast-container" id="toast-container"></div>
   <!-- Hamburger bar for narrow viewports -->
   <div class="hamburger-bar" id="hamburger-bar">
-    <button class="hamburger-btn" id="hamburger-btn" aria-label="Toggle sidebar">&#9776;</button>
-    <span class="logo-text">Agent7</span>
+    <button class="hamburger-btn" id="hamburger-toggle" aria-label="Toggle sidebar">&#9776;</button>
+    <span class="hamburger-title">Agent7</span>
   </div>
   <!-- Sidebar overlay backdrop -->
   <div class="sidebar-overlay" id="sidebar-overlay"></div>
@@ -28,6 +28,9 @@
           <div class="logo-icon">🤖</div>
           <span class="logo-text">Agent7</span>
         </div>
+        <button class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse Sidebar">&#x2039;</button>
+      </div>
+      <div class="sidebar-auto-toggle">
         <div class="autonomous-toggle" title="Toggle Autonomous Mode">
           <label class="switch">
             <input type="checkbox" id="autonomous-mode">
