@@ -2,7 +2,7 @@
 
 **Date:** 2026-02-25
 **Status:** Approved
-**Approach:** Layered Enhancement (4 composable layers on existing architecture)
+**Approach:** Layered Enhancement (4 composable layers + AWS Bedrock + multi-agent orchestrator)
 
 ## Goal
 
@@ -21,7 +21,7 @@ server.py (WebSocket API — updated)
         └── TaskExecutionMemory (per-domain learning)
 ```
 
-All layers are provider-agnostic — LLM vision calls route through the existing `get_chat_model()` function supporting OpenAI, Anthropic, and Google.
+All layers are provider-agnostic — LLM vision calls route through `get_llm()` supporting OpenAI, Anthropic, Google, and AWS Bedrock.
 
 ## Layer 1: Reliability Layer
 
@@ -78,31 +78,60 @@ Upgraded task planning and execution:
   - Authentication: detect login, fill credentials, handle 2FA (pause for user)
   - Wait conditions: wait for content, network requests, element interactivity
 
+## Layer 5: AWS Bedrock Provider
+
+**File:** `python-backend/server.py` (updated `get_llm()`), `python-backend/requirements.txt`
+
+Adds AWS Bedrock as a fourth LLM provider:
+
+- **Authentication** — User enters AWS Access Key ID, Secret Access Key, and Region in the Agent7 settings UI. Stored alongside existing API keys via the `initialize` WebSocket method.
+- **Model selection** — Support any Bedrock model ID (e.g., `anthropic.claude-3-5-sonnet-20241022-v2:0`, `amazon.titan-text-premier-v1:0`, `meta.llama3-70b-instruct-v1:0`). Default to Claude on Bedrock.
+- **Integration** — Add `bedrock` case to `get_llm()` using `ChatBedrockConverse` from `langchain-aws`.
+- **Vision support** — Bedrock Claude models support vision, so SmartVision Tier 2 works with Bedrock.
+
+## Layer 6: Multi-Agent Orchestrator
+
+**File:** `python-backend/browser/orchestrator.py`
+
+Python-side orchestration to coordinate the 7 specialized agents:
+
+- **Goal decomposition** — Receives a goal, uses LLM to decompose into sub-tasks with type annotations.
+- **Agent assignment** — Maps sub-task types to agents: `browser` → EnhancedAgent, `coder` → code execution, `researcher` → LLM analysis, `file_manager` → file operations, `planner` → LLM planning, `executor` → general execution, `reviewer` → LLM verification.
+- **Dependency-ordered execution** — Executes sub-tasks in dependency order, tracking completion.
+- **Failure handling** — On agent failure: re-assign to a different agent or re-plan the remaining steps.
+- **Progress broadcasting** — Sends real-time progress events to all WebSocket clients.
+- **New WebSocket method** — `orchestrate_task` for multi-agent workflows. Old `execute_task` remains for backward compatibility.
+
 ## File Structure
 
 ```
 python-backend/
 ├── browser/                    # NEW package
 │   ├── __init__.py
+│   ├── config.py               # Configurable defaults
 │   ├── reliable_browser.py     # Retry, timeouts, circuit breaker
 │   ├── smart_vision.py         # 3-tier element detection
 │   ├── session_manager.py      # Browser pool, tabs, health, cleanup
 │   ├── enhanced_agent.py       # Page-aware planning, re-planning, memory
-│   └── config.py               # Configurable defaults
-├── server.py                   # UPDATED — imports from browser/ package
+│   └── orchestrator.py         # Multi-agent orchestration
+├── server.py                   # UPDATED — imports from browser/, Bedrock provider
 ├── tools.py                    # Unchanged
 ├── multimodal.py               # Unchanged
-└── requirements.txt            # UPDATED — add pytesseract
+└── requirements.txt            # UPDATED — add pytesseract, langchain-aws, boto3
 ```
 
 ## Migration
 
 - Replace `BrowserAgent` and `VisionAnalyzer` in `server.py` with imports from `browser/` package
 - All WebSocket API methods (`browser_navigate`, `browser_click`, etc.) continue to work unchanged
-- `browser_execute` routes to `EnhancedAutonomousAgent`
-- No frontend changes required — same WebSocket protocol
+- `browser_execute` routes to `EnhancedAgent`
+- New `orchestrate_task` WebSocket method for multi-agent workflows
+- `get_llm()` gains `bedrock` provider option
+- No frontend changes required — same WebSocket protocol (new method is additive)
 
 ## New Dependencies
 
 - `pytesseract>=0.3.10` (Python package)
 - `tesseract-ocr` (system, via `brew install tesseract` on macOS)
+- `langchain-aws>=0.2.0` (Bedrock integration)
+- `boto3>=1.34.0` (AWS SDK)

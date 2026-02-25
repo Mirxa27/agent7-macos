@@ -2,11 +2,11 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Make Agent7's browser automation handle complex multi-step web tasks reliably through four composable layers: reliability, smart vision, session management, and enhanced autonomous agent.
+**Goal:** Make Agent7's browser automation handle complex multi-step web tasks reliably through composable layers (reliability, smart vision, session management, enhanced agent), add AWS Bedrock as an LLM provider, and build a Python-side multi-agent orchestrator.
 
-**Architecture:** Four new modules in a `python-backend/browser/` package wrap the existing Playwright/browser-use stack. `ReliableBrowser` adds retry/timeout/circuit-breaker around operations. `SessionManager` owns browser lifecycle (pool, tabs, health, cleanup). `SmartVision` provides 3-tier element detection (selectors, LLM vision, OCR). `EnhancedAgent` composes all layers for page-aware planning, adaptive re-planning, and per-domain learning. `server.py` is updated to import from the new package instead of inline classes.
+**Architecture:** Six concerns in a `python-backend/browser/` package. `ReliableBrowser` adds retry/timeout/circuit-breaker. `SessionManager` owns browser lifecycle. `SmartVision` provides 3-tier element detection. `EnhancedAgent` composes all layers for page-aware planning. AWS Bedrock joins as a fourth LLM provider via `langchain-aws`. `AgentOrchestrator` coordinates the 7 specialized agents (planner, researcher, executor, coder, browser, file_manager, reviewer) with dependency-ordered execution and progress broadcasting.
 
-**Tech Stack:** Python 3.9+, Playwright, browser-use, LangChain (OpenAI/Anthropic/Google), OpenCV, pytesseract, pytest + pytest-asyncio
+**Tech Stack:** Python 3.9+, Playwright, browser-use, LangChain (OpenAI/Anthropic/Google/Bedrock), boto3, OpenCV, pytesseract, pytest + pytest-asyncio
 
 ---
 
@@ -1925,7 +1925,7 @@ git commit -m "feat(browser): wire new browser layers into server.py, remove old
 cd python-backend && python -m pytest tests/ -v --tb=short
 ```
 
-Expected: All tests PASS (config: 6, reliable_browser: 7, session_manager: 8, smart_vision: 7, enhanced_agent: 7 = 35 total)
+Expected: All tests PASS for tasks 1-6 (config: 6, reliable_browser: 7, session_manager: 8, smart_vision: 7, enhanced_agent: 7 = 35 total)
 
 **Step 2: Verify imports work**
 
@@ -1969,3 +1969,725 @@ print('requirements.txt verified')
 ```
 
 Expected: `requirements.txt verified`
+
+---
+
+## Task 8: AWS Bedrock LLM provider
+
+**Files:**
+- Modify: `python-backend/server.py` (add bedrock to `get_llm`)
+- Modify: `python-backend/requirements.txt` (add langchain-aws, boto3)
+- Test: `python-backend/tests/test_bedrock.py`
+
+**Step 1: Add dependencies to requirements.txt**
+
+Append to `python-backend/requirements.txt`:
+
+```
+# AWS Bedrock
+langchain-aws>=0.2.0
+boto3>=1.34.0
+```
+
+**Step 2: Write the failing test**
+
+Create `python-backend/tests/test_bedrock.py`:
+
+```python
+import pytest
+from unittest.mock import patch, MagicMock
+
+
+class TestBedrockProvider:
+    def test_get_llm_bedrock_returns_chat_model(self):
+        """Test that get_llm('bedrock') returns a ChatBedrockConverse instance."""
+        from server import AutonomousAgent
+
+        agent = AutonomousAgent.__new__(AutonomousAgent)
+        agent.api_keys = {
+            "bedrock": {
+                "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+                "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                "region": "us-east-1",
+                "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            }
+        }
+        with patch("server.ChatBedrockConverse") as MockBedrock:
+            mock_instance = MagicMock()
+            MockBedrock.return_value = mock_instance
+            llm = agent.get_llm("bedrock")
+            MockBedrock.assert_called_once()
+            call_kwargs = MockBedrock.call_args[1]
+            assert call_kwargs["model_id"] == "anthropic.claude-3-5-sonnet-20241022-v2:0"
+            assert call_kwargs["region_name"] == "us-east-1"
+
+    def test_get_llm_bedrock_default_model(self):
+        """Test that bedrock defaults to Claude if no model_id specified."""
+        from server import AutonomousAgent
+
+        agent = AutonomousAgent.__new__(AutonomousAgent)
+        agent.api_keys = {
+            "bedrock": {
+                "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+                "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                "region": "us-east-1",
+            }
+        }
+        with patch("server.ChatBedrockConverse") as MockBedrock:
+            MockBedrock.return_value = MagicMock()
+            agent.get_llm("bedrock")
+            call_kwargs = MockBedrock.call_args[1]
+            assert "claude" in call_kwargs["model_id"].lower()
+
+    def test_get_llm_bedrock_missing_keys_raises(self):
+        """Test that missing bedrock credentials raises ValueError."""
+        from server import AutonomousAgent
+
+        agent = AutonomousAgent.__new__(AutonomousAgent)
+        agent.api_keys = {}
+        with pytest.raises(ValueError, match="No API key available"):
+            agent.get_llm("bedrock")
+
+    def test_get_llm_bedrock_in_fallback_chain(self):
+        """Test that bedrock is tried in the fallback chain when other providers unavailable."""
+        from server import AutonomousAgent
+
+        agent = AutonomousAgent.__new__(AutonomousAgent)
+        agent.api_keys = {
+            "bedrock": {
+                "aws_access_key_id": "AKIAIOSFODNN7EXAMPLE",
+                "aws_secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+                "region": "us-east-1",
+            }
+        }
+        with patch("server.ChatBedrockConverse") as MockBedrock:
+            MockBedrock.return_value = MagicMock()
+            # No openai/anthropic/google keys — should fall back to bedrock
+            llm = agent.get_llm()
+            MockBedrock.assert_called_once()
+```
+
+**Step 3: Run test to verify it fails**
+
+```bash
+cd python-backend && python -m pytest tests/test_bedrock.py -v
+```
+
+Expected: FAIL — `ImportError: cannot import name 'ChatBedrockConverse' from 'server'`
+
+**Step 4: Add Bedrock import and update get_llm in server.py**
+
+At the top of `server.py`, add the import:
+
+```python
+from langchain_aws import ChatBedrockConverse
+```
+
+Update `AutonomousAgent.get_llm()` to add bedrock support:
+
+```python
+    def get_llm(self, provider: str = "openai"):
+        """Get language model based on available API keys."""
+        if provider == "openai" and self.api_keys.get("openai"):
+            return ChatOpenAI(
+                model="gpt-4o", api_key=self.api_keys["openai"], temperature=0.3
+            )
+        elif provider == "anthropic" and self.api_keys.get("anthropic"):
+            return ChatAnthropic(
+                model="claude-3-5-sonnet-20241022",
+                api_key=self.api_keys["anthropic"],
+                temperature=0.3,
+            )
+        elif provider == "google" and self.api_keys.get("google"):
+            return ChatGoogleGenerativeAI(
+                model="gemini-2.0-flash-exp",
+                api_key=self.api_keys["google"],
+                temperature=0.3,
+            )
+        elif provider == "bedrock" and self.api_keys.get("bedrock"):
+            bedrock_config = self.api_keys["bedrock"]
+            model_id = bedrock_config.get(
+                "model_id", "anthropic.claude-3-5-sonnet-20241022-v2:0"
+            )
+            return ChatBedrockConverse(
+                model_id=model_id,
+                region_name=bedrock_config.get("region", "us-east-1"),
+                credentials_profile_name=None,
+                aws_access_key_id=bedrock_config.get("aws_access_key_id"),
+                aws_secret_access_key=bedrock_config.get("aws_secret_access_key"),
+                temperature=0.3,
+            )
+        # Fallback: try any available provider
+        for p in ["openai", "anthropic", "google", "bedrock"]:
+            if self.api_keys.get(p):
+                return self.get_llm(p)
+        raise ValueError("No API key available for any provider")
+```
+
+**Step 5: Run tests to verify they pass**
+
+```bash
+cd python-backend && python -m pytest tests/test_bedrock.py -v
+```
+
+Expected: All 4 tests PASS
+
+**Step 6: Commit**
+
+```bash
+git add python-backend/server.py python-backend/requirements.txt python-backend/tests/test_bedrock.py
+git commit -m "feat: add AWS Bedrock as LLM provider with langchain-aws"
+```
+
+---
+
+## Task 9: Multi-Agent Orchestrator
+
+**Files:**
+- Create: `python-backend/browser/orchestrator.py`
+- Test: `python-backend/tests/test_orchestrator.py`
+- Modify: `python-backend/server.py` (add `orchestrate_task` WebSocket method)
+- Modify: `python-backend/browser/__init__.py` (export new class)
+
+**Step 1: Write the failing test**
+
+Create `python-backend/tests/test_orchestrator.py`:
+
+```python
+import pytest
+import asyncio
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
+from browser.orchestrator import AgentOrchestrator, SpecializedAgent, TaskDecomposition
+
+
+class TestSpecializedAgent:
+    def test_create_agent(self):
+        agent = SpecializedAgent(name="browser", agent_type="browser", priority=2)
+        assert agent.name == "browser"
+        assert agent.status == "idle"
+
+    @pytest.mark.asyncio
+    async def test_execute_updates_status(self):
+        agent = SpecializedAgent(name="researcher", agent_type="research", priority=2)
+        handler = AsyncMock(return_value={"success": True, "output": "analysis done"})
+        agent.set_handler(handler)
+        result = await agent.execute({"description": "analyze data", "type": "research"})
+        assert result["success"] is True
+        assert agent.status == "idle"
+        assert len(agent.history) == 1
+
+    @pytest.mark.asyncio
+    async def test_execute_sets_error_on_failure(self):
+        agent = SpecializedAgent(name="coder", agent_type="coding", priority=2)
+        handler = AsyncMock(side_effect=Exception("code error"))
+        agent.set_handler(handler)
+        result = await agent.execute({"description": "write code", "type": "coding"})
+        assert result["success"] is False
+        assert agent.status == "error"
+
+
+class TestTaskDecomposition:
+    def test_decompose_result(self):
+        decomp = TaskDecomposition(
+            goal="book a flight",
+            sub_tasks=[
+                {"id": 1, "description": "search flights", "type": "browser", "depends_on": []},
+                {"id": 2, "description": "select flight", "type": "browser", "depends_on": [1]},
+                {"id": 3, "description": "fill payment", "type": "browser", "depends_on": [2]},
+            ],
+        )
+        assert len(decomp.sub_tasks) == 3
+        assert decomp.sub_tasks[1]["depends_on"] == [1]
+
+
+class TestOrchestratorRouting:
+    @pytest.fixture
+    def orchestrator(self):
+        orch = AgentOrchestrator()
+        orch._llm = AsyncMock()
+        return orch
+
+    def test_agent_type_mapping(self, orchestrator):
+        assert orchestrator.select_agent("browser") == "browser"
+        assert orchestrator.select_agent("research") == "researcher"
+        assert orchestrator.select_agent("coding") == "coder"
+        assert orchestrator.select_agent("file") == "file_manager"
+        assert orchestrator.select_agent("review") == "reviewer"
+        assert orchestrator.select_agent("planning") == "planner"
+        assert orchestrator.select_agent("execution") == "executor"
+        assert orchestrator.select_agent("unknown_type") == "executor"  # fallback
+
+    def test_agents_are_registered(self, orchestrator):
+        orchestrator.initialize_agents()
+        assert len(orchestrator._agents) == 7
+        assert "browser" in orchestrator._agents
+        assert "planner" in orchestrator._agents
+        assert "reviewer" in orchestrator._agents
+
+
+class TestOrchestratorDecomposition:
+    @pytest.fixture
+    def orchestrator(self):
+        orch = AgentOrchestrator()
+        orch._llm = AsyncMock()
+        return orch
+
+    @pytest.mark.asyncio
+    async def test_decompose_goal(self, orchestrator):
+        plan_json = json.dumps({
+            "sub_tasks": [
+                {"id": 1, "description": "navigate to site", "type": "browser", "depends_on": []},
+                {"id": 2, "description": "fill form", "type": "browser", "depends_on": [1]},
+            ]
+        })
+        mock_response = MagicMock()
+        mock_response.content = plan_json
+        orchestrator._llm.ainvoke = AsyncMock(return_value=mock_response)
+        decomp = await orchestrator.decompose("Fill out the registration form")
+        assert len(decomp.sub_tasks) == 2
+
+    @pytest.mark.asyncio
+    async def test_decompose_fallback_on_error(self, orchestrator):
+        orchestrator._llm.ainvoke = AsyncMock(side_effect=Exception("LLM down"))
+        decomp = await orchestrator.decompose("Do something")
+        assert len(decomp.sub_tasks) >= 1  # Fallback plan
+
+
+class TestOrchestratorExecution:
+    @pytest.fixture
+    def orchestrator(self):
+        orch = AgentOrchestrator()
+        orch._llm = AsyncMock()
+        orch.initialize_agents()
+        # Set all agents to succeed
+        for agent in orch._agents.values():
+            agent.set_handler(AsyncMock(return_value={"success": True, "output": "done"}))
+        return orch
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_respects_dependencies(self, orchestrator):
+        decomp = TaskDecomposition(
+            goal="test",
+            sub_tasks=[
+                {"id": 1, "description": "step 1", "type": "browser", "depends_on": []},
+                {"id": 2, "description": "step 2", "type": "coding", "depends_on": [1]},
+                {"id": 3, "description": "step 3", "type": "review", "depends_on": [2]},
+            ],
+        )
+        result = await orchestrator.execute_plan(decomp)
+        assert result["success"] is True
+        assert len(result["results"]) == 3
+
+    @pytest.mark.asyncio
+    async def test_execute_plan_reports_failure(self, orchestrator):
+        # Make browser agent fail
+        orchestrator._agents["browser"].set_handler(
+            AsyncMock(side_effect=Exception("browser crashed"))
+        )
+        decomp = TaskDecomposition(
+            goal="test",
+            sub_tasks=[
+                {"id": 1, "description": "browse", "type": "browser", "depends_on": []},
+            ],
+        )
+        result = await orchestrator.execute_plan(decomp)
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_progress_callback(self, orchestrator):
+        progress_events = []
+
+        async def on_progress(event):
+            progress_events.append(event)
+
+        orchestrator.on_progress = on_progress
+        decomp = TaskDecomposition(
+            goal="test",
+            sub_tasks=[
+                {"id": 1, "description": "step 1", "type": "execution", "depends_on": []},
+            ],
+        )
+        await orchestrator.execute_plan(decomp)
+        assert len(progress_events) >= 1
+        assert progress_events[0]["step"] == 1
+```
+
+**Step 2: Run test to verify it fails**
+
+```bash
+cd python-backend && python -m pytest tests/test_orchestrator.py -v
+```
+
+Expected: FAIL with `ModuleNotFoundError`
+
+**Step 3: Write the implementation**
+
+Create `python-backend/browser/orchestrator.py`:
+
+```python
+"""AgentOrchestrator — multi-agent task decomposition and coordinated execution."""
+
+import json
+import logging
+import re
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Callable, Coroutine, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class TaskDecomposition:
+    """Result of decomposing a goal into sub-tasks."""
+
+    goal: str
+    sub_tasks: List[Dict[str, Any]] = field(default_factory=list)
+
+
+class SpecializedAgent:
+    """A named agent that handles a specific type of task."""
+
+    def __init__(self, name: str, agent_type: str, priority: int = 3):
+        self.name = name
+        self.agent_type = agent_type
+        self.priority = priority
+        self.status = "idle"
+        self.history: List[Dict] = []
+        self._handler: Optional[Callable] = None
+
+    def set_handler(self, handler: Callable):
+        """Set the async function that executes tasks for this agent."""
+        self._handler = handler
+
+    async def execute(self, task: Dict) -> Dict[str, Any]:
+        """Execute a task and return the result."""
+        self.status = "busy"
+        try:
+            if self._handler:
+                result = await self._handler(task)
+            else:
+                result = {"success": True, "output": f"Agent {self.name}: {task.get('description', '')}"}
+
+            self.history.append({
+                "task": task,
+                "result": result,
+                "timestamp": datetime.now().isoformat(),
+            })
+            self.status = "idle"
+            return {
+                "success": result.get("success", True),
+                "agent": self.name,
+                "output": result.get("output", ""),
+                "summary": f"Agent {self.name} completed: {task.get('description', '')}",
+            }
+        except Exception as e:
+            self.status = "error"
+            return {
+                "success": False,
+                "agent": self.name,
+                "error": str(e),
+                "summary": f"Agent {self.name} failed: {e}",
+            }
+
+
+# Agent type → agent name mapping
+AGENT_TYPE_MAP = {
+    "browser": "browser",
+    "research": "researcher",
+    "analysis": "researcher",
+    "coding": "coder",
+    "code": "coder",
+    "file": "file_manager",
+    "review": "reviewer",
+    "verification": "reviewer",
+    "planning": "planner",
+    "execution": "executor",
+}
+
+
+class AgentOrchestrator:
+    """Coordinates 7 specialized agents to execute complex multi-step goals."""
+
+    def __init__(self):
+        self._agents: Dict[str, SpecializedAgent] = {}
+        self._llm = None
+        self.on_progress: Optional[Callable[..., Coroutine]] = None
+
+    def set_llm(self, llm):
+        self._llm = llm
+
+    def initialize_agents(self):
+        """Create the 7 specialized agents."""
+        agent_configs = [
+            ("planner", "planning", 1),
+            ("researcher", "research", 2),
+            ("executor", "execution", 3),
+            ("coder", "coding", 2),
+            ("browser", "browser", 2),
+            ("file_manager", "file", 3),
+            ("reviewer", "review", 4),
+        ]
+        for name, agent_type, priority in agent_configs:
+            self._agents[name] = SpecializedAgent(name, agent_type, priority)
+
+    def select_agent(self, task_type: str) -> str:
+        """Select the appropriate agent name for a task type."""
+        return AGENT_TYPE_MAP.get(task_type, "executor")
+
+    def register_handler(self, agent_name: str, handler: Callable):
+        """Register an execution handler for an agent."""
+        if agent_name in self._agents:
+            self._agents[agent_name].set_handler(handler)
+
+    async def decompose(self, goal: str, context: Dict = None) -> TaskDecomposition:
+        """Use LLM to decompose a goal into typed sub-tasks with dependencies."""
+        context = context or {}
+
+        prompt = f"""Decompose this goal into specific, actionable sub-tasks:
+
+Goal: {goal}
+Context: {json.dumps(context, indent=2)}
+
+Create 3-7 sub-tasks. Each must include:
+- id: sequential integer starting at 1
+- description: what to do
+- type: one of [browser, research, coding, file, review, planning, execution]
+- depends_on: list of sub-task ids that must complete first (empty list if none)
+
+Return ONLY JSON: {{"sub_tasks": [...]}}"""
+
+        try:
+            response = await self._llm.ainvoke(prompt)
+            content = response.content if hasattr(response, "content") else str(response)
+            json_match = re.search(r"\{.*\}", content, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group())
+                return TaskDecomposition(
+                    goal=goal,
+                    sub_tasks=data.get("sub_tasks", []),
+                )
+        except Exception as e:
+            logger.error(f"Decomposition error: {e}")
+
+        # Fallback
+        return TaskDecomposition(
+            goal=goal,
+            sub_tasks=[
+                {"id": 1, "description": f"Analyze: {goal}", "type": "research", "depends_on": []},
+                {"id": 2, "description": f"Execute: {goal}", "type": "execution", "depends_on": [1]},
+                {"id": 3, "description": f"Verify: {goal}", "type": "review", "depends_on": [2]},
+            ],
+        )
+
+    async def execute_plan(self, decomposition: TaskDecomposition) -> Dict[str, Any]:
+        """Execute sub-tasks in dependency order using assigned agents."""
+        completed: Dict[int, Dict] = {}
+        results = []
+
+        for sub_task in decomposition.sub_tasks:
+            task_id = sub_task["id"]
+            depends_on = sub_task.get("depends_on", [])
+
+            # Check dependencies
+            if not all(dep in completed for dep in depends_on):
+                results.append({
+                    "success": False,
+                    "task_id": task_id,
+                    "error": f"Dependencies not met: {depends_on}",
+                })
+                continue
+
+            # Select and execute
+            agent_name = self.select_agent(sub_task.get("type", "execution"))
+            agent = self._agents.get(agent_name)
+
+            if not agent:
+                results.append({
+                    "success": False,
+                    "task_id": task_id,
+                    "error": f"Agent not found: {agent_name}",
+                })
+                continue
+
+            # Broadcast progress
+            if self.on_progress:
+                await self.on_progress({
+                    "step": task_id,
+                    "total": len(decomposition.sub_tasks),
+                    "agent": agent_name,
+                    "description": sub_task.get("description", ""),
+                    "status": "executing",
+                })
+
+            result = await agent.execute(sub_task)
+            results.append({**result, "task_id": task_id})
+
+            if result.get("success"):
+                completed[task_id] = result
+            else:
+                # Broadcast failure
+                if self.on_progress:
+                    await self.on_progress({
+                        "step": task_id,
+                        "agent": agent_name,
+                        "status": "failed",
+                        "error": result.get("error", ""),
+                    })
+                break  # Stop on failure (dependencies would block anyway)
+
+        all_success = all(r.get("success") for r in results)
+        return {
+            "success": all_success,
+            "goal": decomposition.goal,
+            "results": results,
+            "completed": len(completed),
+            "total": len(decomposition.sub_tasks),
+            "summary": f"{'Completed' if all_success else 'Failed'}: "
+                       f"{len(completed)}/{len(decomposition.sub_tasks)} steps",
+        }
+
+    async def orchestrate(self, goal: str, context: Dict = None) -> Dict[str, Any]:
+        """Full orchestration: decompose → assign → execute → report."""
+        decomposition = await self.decompose(goal, context)
+        return await self.execute_plan(decomposition)
+```
+
+**Step 4: Run tests to verify they pass**
+
+```bash
+cd python-backend && python -m pytest tests/test_orchestrator.py -v
+```
+
+Expected: All 10 tests PASS
+
+**Step 5: Update `__init__.py` exports**
+
+Add to `python-backend/browser/__init__.py`:
+
+```python
+from browser.orchestrator import AgentOrchestrator, SpecializedAgent, TaskDecomposition
+```
+
+And add to `__all__`:
+
+```python
+    "AgentOrchestrator",
+    "SpecializedAgent",
+    "TaskDecomposition",
+```
+
+**Step 6: Add `orchestrate_task` WebSocket method to server.py**
+
+In `Agent7Server.handle_message`, add a new handler after the existing `execute_task` handler:
+
+```python
+            elif method == "orchestrate_task":
+                # Multi-agent orchestrated execution
+                if not self.autonomous_agent:
+                    response["error"] = "Agent not initialized"
+                else:
+                    goal = params.get("goal", params.get("task", ""))
+                    context = params.get("context", {})
+
+                    orchestrator = AgentOrchestrator()
+                    orchestrator.set_llm(self.autonomous_agent.get_llm())
+                    orchestrator.initialize_agents()
+
+                    # Wire browser agent handler
+                    orchestrator.register_handler(
+                        "browser",
+                        lambda task: self.autonomous_agent._enhanced_agent.execute_task(
+                            task.get("description", ""), task
+                        ),
+                    )
+
+                    # Wire progress broadcasting
+                    async def broadcast_progress(event):
+                        await self.broadcast({
+                            "type": "orchestration_progress",
+                            "data": event,
+                        })
+
+                    orchestrator.on_progress = broadcast_progress
+
+                    result = await orchestrator.orchestrate(goal, context)
+                    response["result"] = result
+```
+
+**Step 7: Run all tests**
+
+```bash
+cd python-backend && python -m pytest tests/ -v --tb=short
+```
+
+Expected: All tests PASS
+
+**Step 8: Commit**
+
+```bash
+git add python-backend/browser/orchestrator.py python-backend/tests/test_orchestrator.py python-backend/browser/__init__.py python-backend/server.py
+git commit -m "feat(browser): add multi-agent orchestrator with decomposition and progress events"
+```
+
+---
+
+## Task 10: Final integration test and verification
+
+**Files:**
+- All files in `python-backend/browser/` and `python-backend/tests/`
+
+**Step 1: Run full test suite**
+
+```bash
+cd python-backend && python -m pytest tests/ -v --tb=short
+```
+
+Expected: All tests PASS (config: 6, reliable_browser: 7, session_manager: 8, smart_vision: 7, enhanced_agent: 7, bedrock: 4, orchestrator: 10 = 49 total)
+
+**Step 2: Verify all imports**
+
+```bash
+cd python-backend && python -c "
+from browser import (
+    AgentBrowserConfig, ReliableBrowser, SessionManager,
+    SmartVision, EnhancedAgent, TaskExecutionMemory,
+    AgentOrchestrator, SpecializedAgent, TaskDecomposition,
+)
+from server import AutonomousAgent, Agent7Server
+print('All imports successful')
+print(f'Agents: {[a[0] for a in [(\"planner\",), (\"researcher\",), (\"executor\",), (\"coder\",), (\"browser\",), (\"file_manager\",), (\"reviewer\",)]]}')
+print(f'Providers: openai, anthropic, google, bedrock')
+"
+```
+
+Expected: All imports successful
+
+**Step 3: Verify server.py syntax**
+
+```bash
+cd python-backend && python -c "import ast; ast.parse(open('server.py').read()); print('server.py syntax OK')"
+```
+
+Expected: `server.py syntax OK`
+
+**Step 4: Verify requirements.txt has all new deps**
+
+```bash
+cd python-backend && python -c "
+with open('requirements.txt') as f:
+    content = f.read()
+for dep in ['pytesseract', 'langchain-aws', 'boto3']:
+    assert dep in content, f'{dep} missing from requirements.txt'
+print('All dependencies present in requirements.txt')
+"
+```
+
+Expected: `All dependencies present in requirements.txt`
+
+**Step 5: Commit any fixes**
+
+```bash
+git add -A && git commit -m "fix: resolve final integration issues" || echo "Nothing to fix"
+```
