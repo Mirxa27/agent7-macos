@@ -4,18 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agent7</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
 </head>
 <body>
+  <div class="toast-container" id="toast-container"></div>
+  <!-- Hamburger bar for narrow viewports -->
+  <div class="hamburger-bar" id="hamburger-bar">
+    <button class="hamburger-btn" id="hamburger-btn" aria-label="Toggle sidebar">&#9776;</button>
+    <span class="logo-text">Agent7</span>
+  </div>
+  <!-- Sidebar overlay backdrop -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <div id="app">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-icon">🤖</span>
+          <div class="logo-icon">🤖</div>
           <span class="logo-text">Agent7</span>
         </div>
-        <div class="autonomous-toggle">
+        <div class="autonomous-toggle" title="Toggle Autonomous Mode">
           <label class="switch">
             <input type="checkbox" id="autonomous-mode">
             <span class="slider"></span>
@@ -32,7 +45,7 @@
         <button class="nav-item" data-view="agents">
           <span class="nav-icon">👥</span>
           <span>Agents</span>
-          <span class="badge" id="agent-count">0</span>
+          <span class="badge" id="agent-count">7</span>
         </button>
         <button class="nav-item" data-view="workflows">
           <span class="nav-icon">⚡</span>
@@ -53,6 +66,10 @@
       </nav>
       
       <div class="sidebar-footer">
+        <div class="connection-status" id="connection-status">
+          <span class="status-dot offline"></span>
+          <span class="status-text">Disconnected</span>
+        </div>
         <button class="nav-item" data-view="settings">
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
@@ -66,24 +83,31 @@
       <div class="view active" id="chat-view">
         <div class="chat-container">
           <div class="chat-header">
-            <h2>Agent7 Assistant</h2>
+            <div class="chat-title">
+              <h2>Agent7 Assistant</h2>
+              <span class="model-indicator" id="current-model">GPT-4o</span>
+            </div>
             <div class="header-actions">
+              <button class="btn-icon" id="voice-input-btn" title="Voice Input">
+                <span class="voice-icon">🎤</span>
+              </button>
               <button class="btn-icon" id="clear-chat" title="Clear Chat">🗑️</button>
-              <button class="btn-icon" id="export-chat" title="Export">📥</button>
+              <button class="btn-icon" id="export-chat" title="Export Chat">📥</button>
             </div>
           </div>
           
           <div class="chat-messages" id="chat-messages">
-            <div class="message system">
+            <div class="message system welcome-message">
               <div class="message-content">
-                <p>Welcome to <strong>Agent7</strong> - Your Advanced AI Agent</p>
-                <p class="hint">I can help you with complex tasks using multiple specialized agents. Try asking me to:</p>
-                <ul class="hints">
-                  <li>Research and summarize a topic</li>
-                  <li>Automate browser tasks</li>
-                  <li>Write and execute code</li>
-                  <li>Manage files and workflows</li>
-                </ul>
+                <h3>Welcome to Agent7</h3>
+                <p>Your advanced AI agent for complex multi-step tasks.</p>
+                <div class="capabilities">
+                  <div class="capability"><span class="cap-icon">🔍</span><span>Research</span></div>
+                  <div class="capability"><span class="cap-icon">🌐</span><span>Browser</span></div>
+                  <div class="capability"><span class="cap-icon">💻</span><span>Code</span></div>
+                  <div class="capability"><span class="cap-icon">📊</span><span>Data</span></div>
+                </div>
+                <p class="hint">Try: "Research the latest AI developments"</p>
               </div>
             </div>
           </div>
@@ -92,113 +116,87 @@
             <div class="input-toolbar">
               <button class="toolbar-btn" id="attach-file" title="Attach File">📎</button>
               <button class="toolbar-btn" id="screenshot" title="Screenshot">📸</button>
-              <button class="toolbar-btn" id="voice-input" title="Voice Input">🎤</button>
-              <div class="toolbar-divider"></div>
-              <button class="toolbar-btn" id="agent-selector" title="Select Agent">👤</button>
+              <button class="toolbar-btn" id="mention-agent" title="Mention Agent">@</button>
             </div>
             <div class="input-wrapper">
-              <textarea 
-                id="chat-input" 
-                placeholder="Type a message or task... (Cmd+Enter to send)"
-                rows="1"
-              ></textarea>
-              <button class="send-btn" id="send-message">
-                <span>➤</span>
-              </button>
+              <textarea id="chat-input" placeholder="Type a message or task... (Cmd+Enter to send)" rows="1"></textarea>
+              <div class="input-actions">
+                <span class="char-count" id="char-count">0/4000</span>
+                <button class="send-btn" id="send-message" title="Send Message">➤</button>
+              </div>
             </div>
           </div>
         </div>
         
-        <!-- Task Panel -->
         <div class="task-panel" id="task-panel">
           <div class="panel-header">
             <h3>Active Tasks</h3>
             <button class="btn-icon" id="collapse-panel">−</button>
           </div>
           <div class="task-list" id="task-list">
-            <!-- Tasks will be added here dynamically -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Agents View -->
-      <div class="view" id="agents-view">
-        <div class="view-header">
-          <h2>Specialized Agents</h2>
-          <button class="btn-primary" id="create-agent">+ Create Agent</button>
-        </div>
-        <div class="agents-grid" id="agents-grid">
-          <!-- Agents will be populated here -->
-        </div>
-      </div>
-
-      <!-- Workflows View -->
-      <div class="view" id="workflows-view">
-        <div class="view-header">
-          <h2>Workflow Automation</h2>
-          <button class="btn-primary" id="create-workflow">+ Create Workflow</button>
-        </div>
-        <div class="workflows-list" id="workflows-list">
-          <!-- Workflows will be listed here -->
-        </div>
-      </div>
-
-      <!-- Memory View -->
-      <div class="view" id="memory-view">
-        <div class="view-header">
-          <h2>Memory & Context</h2>
-          <div class="search-box">
-            <input type="text" id="memory-search" placeholder="Search memory...">
-            <button class="btn-icon">🔍</button>
-          </div>
-        </div>
-        <div class="memory-container">
-          <div class="memory-section">
-            <h3>Conversations</h3>
-            <div class="memory-list" id="conversations-list"></div>
-          </div>
-          <div class="memory-section">
-            <h3>Tasks</h3>
-            <div class="memory-list" id="tasks-list"></div>
-          </div>
-          <div class="memory-section">
-            <h3>Knowledge Base</h3>
-            <div class="memory-list" id="knowledge-list"></div>
+            <div class="empty-state">
+              <span class="empty-icon">📋</span>
+              <p>No active tasks</p>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Browser View -->
       <div class="view" id="browser-view">
-        <div class="browser-container">
+        <div class="browser-view-container">
+          <div class="browser-tabs" id="browser-tabs">
+            <div class="tab active" data-tab-id="1">
+              <span class="tab-favicon">🌐</span>
+              <span class="tab-title">New Tab</span>
+              <button class="tab-close">×</button>
+            </div>
+            <button class="new-tab-btn" id="new-tab">+</button>
+          </div>
+          
           <div class="browser-toolbar">
             <div class="browser-nav">
               <button class="btn-icon" id="browser-back">←</button>
               <button class="btn-icon" id="browser-forward">→</button>
               <button class="btn-icon" id="browser-refresh">↻</button>
+              <button class="btn-icon" id="browser-home">🏠</button>
             </div>
-            <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL...">
+            <div class="browser-address-bar">
+              <span class="security-icon" id="security-icon">🔒</span>
+              <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL or search...">
+              <button class="btn-icon" id="browser-bookmark">⭐</button>
+            </div>
             <div class="browser-actions">
-              <button class="btn-secondary" id="browser-automate">🤖 Automate</button>
-              <button class="btn-secondary" id="browser-screenshot">📸 Screenshot</button>
+              <button class="btn-icon" id="browser-screenshot">📸</button>
+              <button class="btn-icon" id="browser-automate">🤖</button>
             </div>
           </div>
-          <div class="browser-content">
-            <div class="browser-webview" id="browser-webview">
-              <div class="placeholder">
-                <p>Enter a URL to start browsing</p>
-                <p class="hint">Or use the chat to automate browser tasks</p>
-              </div>
+          
+          <div class="webview-container" id="webview-container">
+            <webview id="browser-webview" src="about:blank" autosize="on" allowpopups></webview>
+            <div class="browser-loading" id="browser-loading" style="display: none;">
+              <div class="loading-spinner"></div>
+              <span>Loading...</span>
             </div>
-            <div class="browser-panel" id="browser-panel">
-              <h3>Browser Tools</h3>
-              <div class="tool-grid">
-                <button class="tool-btn" data-tool="navigate">🌐 Navigate</button>
-                <button class="tool-btn" data-tool="click">👆 Click</button>
-                <button class="tool-btn" data-tool="type">⌨️ Type</button>
-                <button class="tool-btn" data-tool="extract">📄 Extract</button>
-                <button class="tool-btn" data-tool="screenshot">📸 Screenshot</button>
-                <button class="tool-btn" data-tool="scroll">📜 Scroll</button>
+          </div>
+          
+          <div class="browser-panel" id="browser-panel">
+            <div class="panel-tabs">
+              <button class="panel-tab active" data-panel="automation">Automation</button>
+              <button class="panel-tab" data-panel="console">Console</button>
+              <button class="panel-tab" data-panel="elements">Elements</button>
+            </div>
+            <div class="panel-content">
+              <div class="panel-section active" id="automation-panel">
+                <h4>Automation Tools</h4>
+                <div class="automation-tools">
+                  <button class="tool-btn" data-action="click"><span>👆</span> Click</button>
+                  <button class="tool-btn" data-action="type"><span>⌨️</span> Type</button>
+                  <button class="tool-btn" data-action="extract"><span>📄</span> Extract</button>
+                  <button class="tool-btn" data-action="scroll"><span>📜</span> Scroll</button>
+                  <button class="tool-btn" data-action="screenshot"><span>📸</span> Screenshot</button>
+                  <button class="tool-btn" data-action="wait"><span>⏱️</span> Wait</button>
+                </div>
               </div>
             </div>
           </div>
@@ -208,18 +206,42 @@
       <!-- Files View -->
       <div class="view" id="files-view">
         <div class="view-header">
-          <h2>File Manager</h2>
-          <div class="file-actions">
-            <button class="btn-secondary" id="select-folder">📁 Select Folder</button>
-            <button class="btn-secondary" id="new-file">📝 New File</button>
+          <div class="header-title">
+            <h2>File Manager</h2>
+            <p class="header-subtitle" id="current-path">Select a folder to browse</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" id="select-folder">📁 Open Folder</button>
+            <button class="btn-secondary" id="new-folder">📂 New Folder</button>
+            <button class="btn-primary" id="new-file">📝 New File</button>
           </div>
         </div>
         <div class="files-container">
-          <div class="file-tree" id="file-tree">
-            <div class="placeholder">Select a folder to browse files</div>
+          <div class="files-sidebar">
+            <div class="file-favorites">
+              <h4>Favorites</h4>
+              <div class="favorite-item" data-path="/">💻 Macintosh HD</div>
+              <div class="favorite-item" data-path="~/Documents">📄 Documents</div>
+              <div class="favorite-item" data-path="~/Downloads">⬇️ Downloads</div>
+              <div class="favorite-item" data-path="~/Desktop">🖥️ Desktop</div>
+            </div>
+          </div>
+          <div class="files-main">
+            <div class="files-toolbar">
+              <div class="breadcrumb" id="breadcrumb"><span>Home</span></div>
+            </div>
+            <div class="file-tree" id="file-tree">
+              <div class="empty-state">
+                <span class="empty-icon">📁</span>
+                <p>No folder selected</p>
+              </div>
+            </div>
           </div>
           <div class="file-preview" id="file-preview">
-            <div class="placeholder">Select a file to preview</div>
+            <div class="empty-state">
+              <span class="empty-icon">👁️</span>
+              <p>Select a file to preview</p>
+            </div>
           </div>
         </div>
       </div>
@@ -240,112 +262,10 @@
               <label>Anthropic API Key</label>
               <input type="password" id="api-key-anthropic" placeholder="sk-...">
             </div>
-            <div class="setting-item">
-              <label>Google API Key</label>
-              <input type="password" id="api-key-google" placeholder="...">
-            </div>
-          </div>
-          
-          <div class="settings-section">
-            <h3>Models</h3>
-            <div class="setting-item">
-              <label>Chat Model</label>
-              <select id="chat-model">
-                <option value="gpt-4">GPT-4</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="claude-3-opus">Claude 3 Opus</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>Agent Model</label>
-              <select id="agent-model">
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="settings-section">
-            <h3>System</h3>
-            <div class="setting-item">
-              <label>Auto-start</label>
-              <input type="checkbox" id="setting-autostart">
-            </div>
-            <div class="setting-item">
-              <label>Menu Bar Icon</label>
-              <input type="checkbox" id="setting-menubar" checked>
-            </div>
-            <div class="setting-item">
-              <label>Notifications</label>
-              <input type="checkbox" id="setting-notifications" checked>
-            </div>
           </div>
         </div>
       </div>
     </main>
-  </div>
-
-  <!-- Modals -->
-  <div class="modal" id="agent-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Create New Agent</h3>
-        <button class="btn-icon close-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Agent Name</label>
-          <input type="text" id="agent-name" placeholder="e.g., Research Assistant">
-        </div>
-        <div class="form-group">
-          <label>Agent Type</label>
-          <select id="agent-type">
-            <option value="general">General Purpose</option>
-            <option value="research">Research</option>
-            <option value="coding">Coding</option>
-            <option value="browser">Browser</option>
-            <option value="file">File Manager</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="agent-description" rows="3" placeholder="What can this agent do?"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary close-modal">Cancel</button>
-        <button class="btn-primary" id="save-agent">Create Agent</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="workflow-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Create Workflow</h3>
-        <button class="btn-icon close-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Workflow Name</label>
-          <input type="text" id="workflow-name" placeholder="e.g., Morning Report">
-        </div>
-        <div class="form-group">
-          <label>Trigger</label>
-          <select id="workflow-trigger">
-            <option value="manual">Manual</option>
-            <option value="schedule">Scheduled</option>
-            <option value="event">Event-based</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary close-modal">Cancel</button>
-        <button class="btn-primary" id="save-workflow">Create Workflow</button>
-      </div>
-    </div>
   </div>
 
   <script src="renderer.js"></script>
