@@ -1550,6 +1550,13 @@ function appendConsoleEntry(level, message) {
 // ============================================
 // File Manager
 // ============================================
+const fs = require('fs');
+const nodePath = require('path');
+const os = require('os');
+
+// Track expanded folders: Set of absolute paths
+const expandedFolders = new Set();
+
 function setupFileManager() {
   const selectFolderBtn = document.getElementById('select-folder');
   const openFolderBtn = document.getElementById('open-folder-btn');
@@ -1559,26 +1566,37 @@ function setupFileManager() {
   if (selectFolderBtn) {
     selectFolderBtn.addEventListener('click', selectFolder);
   }
-
   if (openFolderBtn) {
     openFolderBtn.addEventListener('click', selectFolder);
   }
-
   if (newFolderBtn) {
     newFolderBtn.addEventListener('click', createNewFolder);
   }
-
   if (newFileBtn) {
     newFileBtn.addEventListener('click', createNewFile);
   }
 
-  // Favorite items
+  // Favorite items — click navigates to that path
   document.querySelectorAll('.favorite-item').forEach(item => {
     item.addEventListener('click', () => {
-      const path = item.dataset.path;
-      loadFolder(path);
+      // Highlight the active favorite
+      document.querySelectorAll('.favorite-item').forEach(f => f.classList.remove('active'));
+      item.classList.add('active');
+      const favPath = item.dataset.path;
+      loadFolder(favPath);
     });
   });
+
+  // Drag-and-drop on file area
+  setupFileDragAndDrop();
+}
+
+/** Resolve ~ and relative paths */
+function resolvePath(p) {
+  if (p.startsWith('~')) {
+    return nodePath.join(os.homedir(), p.slice(1));
+  }
+  return p;
 }
 
 async function selectFolder() {
@@ -1588,157 +1606,422 @@ async function selectFolder() {
   }
 }
 
-async function loadFolder(folderPath) {
-  state.files.currentPath = folderPath;
+/**
+ * Load a folder: read its directory contents via Node.js fs,
+ * update breadcrumbs, and render the tree.
+ */
+function loadFolder(folderPath) {
+  const resolved = resolvePath(folderPath);
+  state.files.currentPath = resolved;
+  state.files.selectedFile = null;
+  expandedFolders.clear();
 
-  // Update path display
+  // Update subtitle path display
   const pathDisplay = document.getElementById('current-path');
   if (pathDisplay) {
-    pathDisplay.textContent = folderPath;
+    pathDisplay.textContent = resolved;
   }
 
-  // Update breadcrumb
-  updateBreadcrumb(folderPath);
-
-  try {
-    // Request file list from main process
-    const files = await ipcRenderer.invoke('files:list', folderPath);
-    state.files.items = files || [];
-    renderFileTree();
-  } catch (e) {
-    console.error('Failed to load folder:', e);
-    showError('Failed to load folder contents');
-  }
+  updateBreadcrumb(resolved);
+  renderFileTree();
+  resetPreviewPanel();
 }
 
+/** Build the breadcrumb bar from the current path */
 function updateBreadcrumb(folderPath) {
   const breadcrumb = document.getElementById('breadcrumb');
   if (!breadcrumb) return;
 
   const parts = folderPath.split('/').filter(p => p);
-  breadcrumb.innerHTML = parts.map((part, index) => {
+  let html = '<span class="breadcrumb-home" data-path="/">\uD83C\uDFE0</span>';
+  html += '<span class="breadcrumb-separator">/</span>';
+
+  html += parts.map((part, index) => {
     const path = '/' + parts.slice(0, index + 1).join('/');
     return `<span class="breadcrumb-item" data-path="${path}">${part}</span>`;
   }).join('<span class="breadcrumb-separator">/</span>');
 
-  // Add click handlers
-  breadcrumb.querySelectorAll('.breadcrumb-item').forEach(item => {
+  breadcrumb.innerHTML = html;
+
+  // Click handlers on breadcrumb segments
+  breadcrumb.querySelectorAll('.breadcrumb-item, .breadcrumb-home').forEach(item => {
     item.addEventListener('click', () => {
       loadFolder(item.dataset.path);
     });
   });
 }
 
+/**
+ * Read directory contents synchronously using Node.js fs.
+ * Returns sorted array: directories first, then files, each alphabetically.
+ */
+function readDirectorySync(dirPath) {
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const items = [];
+    for (const entry of entries) {
+      // Skip hidden files (starting with .)
+      if (entry.name.startsWith('.')) continue;
+      const fullPath = nodePath.join(dirPath, entry.name);
+      let stats;
+      try {
+        stats = fs.statSync(fullPath);
+      } catch (_) {
+        continue; // skip files we cannot stat (permissions, broken symlinks)
+      }
+      items.push({
+        name: entry.name,
+        path: fullPath,
+        type: entry.isDirectory() ? 'directory' : 'file',
+        size: stats.size,
+        modified: stats.mtime
+      });
+    }
+    // Sort: directories first, then alphabetical
+    items.sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'directory' ? -1 : 1;
+    });
+    return items;
+  } catch (e) {
+    console.error('Failed to read directory:', dirPath, e);
+    return [];
+  }
+}
+
+/** Render the full file tree for state.files.currentPath */
 function renderFileTree() {
   const fileTree = document.getElementById('file-tree');
   if (!fileTree) return;
 
-  if (state.files.items.length === 0) {
+  const dirPath = state.files.currentPath;
+  if (!dirPath) {
+    fileTree.innerHTML = `
+      <div class="empty-state">
+        <span class="empty-icon">\uD83D\uDCC1</span>
+        <p>No folder selected</p>
+        <p class="empty-hint">Click "Open Folder" or choose a favorite</p>
+      </div>`;
+    return;
+  }
+
+  const items = readDirectorySync(dirPath);
+  state.files.items = items;
+
+  if (items.length === 0) {
     fileTree.innerHTML = `
       <div class="empty-state">
         <span class="empty-icon">\uD83D\uDCC2</span>
         <p>Empty folder</p>
-      </div>
-    `;
+      </div>`;
     return;
   }
 
-  fileTree.innerHTML = state.files.items.map(item => `
-    <div class="file-item ${item.type}" data-path="${item.path}" data-type="${item.type}">
-      <span class="file-icon">${getFileIcon(item)}</span>
-      <div class="file-info">
-        <div class="file-name">${item.name}</div>
-        <div class="file-meta">${formatFileSize(item.size)} \u2022 ${formatDate(item.modified)}</div>
-      </div>
-    </div>
-  `).join('');
-
-  // Add click handlers
-  fileTree.querySelectorAll('.file-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const path = item.dataset.path;
-      const type = item.dataset.type;
-
-      if (type === 'directory') {
-        loadFolder(path);
-      } else {
-        selectFile(path);
-      }
-    });
+  fileTree.innerHTML = '';
+  items.forEach(item => {
+    fileTree.appendChild(createFileItemElement(item, 0));
   });
 }
 
+/**
+ * Create a DOM element for a single file/folder item.
+ * For folders, clicking toggles inline expand/collapse.
+ */
+function createFileItemElement(item, depth) {
+  const wrapper = document.createElement('div');
+
+  const row = document.createElement('div');
+  row.className = 'file-item';
+  if (state.files.selectedFile === item.path) row.classList.add('selected');
+  row.dataset.path = item.path;
+  row.dataset.type = item.type;
+  row.style.paddingLeft = (10 + depth * 20) + 'px';
+
+  if (item.type === 'directory') {
+    const isExpanded = expandedFolders.has(item.path);
+    const chevron = document.createElement('span');
+    chevron.className = 'folder-chevron' + (isExpanded ? ' expanded' : '');
+    chevron.textContent = '\u25B6'; // right-pointing triangle
+    row.appendChild(chevron);
+  }
+
+  const icon = document.createElement('span');
+  icon.className = 'file-icon';
+  icon.textContent = getFileIcon(item);
+  row.appendChild(icon);
+
+  const info = document.createElement('div');
+  info.className = 'file-info';
+  const nameEl = document.createElement('div');
+  nameEl.className = 'file-name';
+  nameEl.textContent = item.name;
+  info.appendChild(nameEl);
+  const metaEl = document.createElement('div');
+  metaEl.className = 'file-meta';
+  metaEl.textContent = (item.type === 'directory' ? 'Folder' : formatFileSize(item.size)) + ' \u2022 ' + formatDate(item.modified);
+  info.appendChild(metaEl);
+  row.appendChild(info);
+
+  wrapper.appendChild(row);
+
+  // Click handler
+  row.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (item.type === 'directory') {
+      toggleFolder(item.path, wrapper, depth);
+    } else {
+      selectFile(item.path);
+    }
+  });
+
+  // If folder is already expanded, render children
+  if (item.type === 'directory' && expandedFolders.has(item.path)) {
+    const childrenContainer = document.createElement('div');
+    childrenContainer.className = 'file-children';
+    const children = readDirectorySync(item.path);
+    children.forEach(child => {
+      childrenContainer.appendChild(createFileItemElement(child, depth + 1));
+    });
+    wrapper.appendChild(childrenContainer);
+  }
+
+  return wrapper;
+}
+
+/** Toggle a folder open/closed inline */
+function toggleFolder(folderPath, wrapperEl, depth) {
+  const isExpanded = expandedFolders.has(folderPath);
+
+  if (isExpanded) {
+    // Collapse: remove children container
+    expandedFolders.delete(folderPath);
+    const childrenEl = wrapperEl.querySelector('.file-children');
+    if (childrenEl) childrenEl.remove();
+    const chevron = wrapperEl.querySelector('.folder-chevron');
+    if (chevron) chevron.classList.remove('expanded');
+  } else {
+    // Expand: read children and append
+    expandedFolders.add(folderPath);
+    const chevron = wrapperEl.querySelector('.folder-chevron');
+    if (chevron) chevron.classList.add('expanded');
+
+    const childrenContainer = document.createElement('div');
+    childrenContainer.className = 'file-children';
+    const children = readDirectorySync(folderPath);
+    if (children.length === 0) {
+      const emptyEl = document.createElement('div');
+      emptyEl.className = 'file-meta';
+      emptyEl.style.paddingLeft = (10 + (depth + 1) * 20) + 'px';
+      emptyEl.style.padding = '6px 10px';
+      emptyEl.textContent = '(empty)';
+      childrenContainer.appendChild(emptyEl);
+    } else {
+      children.forEach(child => {
+        childrenContainer.appendChild(createFileItemElement(child, depth + 1));
+      });
+    }
+    wrapperEl.appendChild(childrenContainer);
+  }
+}
+
+/** File type icon mapping */
 function getFileIcon(item) {
   if (item.type === 'directory') return '\uD83D\uDCC1';
 
   const ext = item.name.split('.').pop().toLowerCase();
   const iconMap = {
-    js: '\uD83D\uDCDC', ts: '\uD83D\uDCD8', py: '\uD83D\uDC0D', html: '\uD83C\uDF10', css: '\uD83C\uDFA8',
-    json: '\uD83D\uDCCB', md: '\uD83D\uDCDD', txt: '\uD83D\uDCC4', pdf: '\uD83D\uDCD5',
-    jpg: '\uD83D\uDDBC\uFE0F', jpeg: '\uD83D\uDDBC\uFE0F', png: '\uD83D\uDDBC\uFE0F', gif: '\uD83D\uDDBC\uFE0F',
-    mp4: '\uD83C\uDFAC', mp3: '\uD83C\uDFB5', zip: '\uD83D\uDCE6'
+    js: '\uD83D\uDCC4', ts: '\uD83D\uDCC4', jsx: '\uD83D\uDCC4', tsx: '\uD83D\uDCC4',
+    html: '\uD83C\uDF10', htm: '\uD83C\uDF10',
+    css: '\uD83C\uDFA8', scss: '\uD83C\uDFA8', less: '\uD83C\uDFA8',
+    json: '\uD83D\uDCCB',
+    md: '\uD83D\uDCDD', markdown: '\uD83D\uDCDD',
+    py: '\uD83D\uDC0D',
+    png: '\uD83D\uDDBC\uFE0F', jpg: '\uD83D\uDDBC\uFE0F', jpeg: '\uD83D\uDDBC\uFE0F', gif: '\uD83D\uDDBC\uFE0F', svg: '\uD83D\uDDBC\uFE0F', webp: '\uD83D\uDDBC\uFE0F', ico: '\uD83D\uDDBC\uFE0F',
+    pdf: '\uD83D\uDCD5',
+    txt: '\uD83D\uDCC4', log: '\uD83D\uDCC4', env: '\uD83D\uDCC4',
+    mp4: '\uD83C\uDFAC', mov: '\uD83C\uDFAC', avi: '\uD83C\uDFAC',
+    mp3: '\uD83C\uDFB5', wav: '\uD83C\uDFB5', flac: '\uD83C\uDFB5',
+    zip: '\uD83D\uDCE6', gz: '\uD83D\uDCE6', tar: '\uD83D\uDCE6', rar: '\uD83D\uDCE6',
+    sh: '\uD83D\uDCC4', bash: '\uD83D\uDCC4', zsh: '\uD83D\uDCC4',
+    yml: '\uD83D\uDCCB', yaml: '\uD83D\uDCCB', toml: '\uD83D\uDCCB',
+    rb: '\uD83D\uDCC4', go: '\uD83D\uDCC4', rs: '\uD83D\uDCC4', java: '\uD83D\uDCC4',
+    c: '\uD83D\uDCC4', cpp: '\uD83D\uDCC4', h: '\uD83D\uDCC4',
+    swift: '\uD83D\uDCC4', kt: '\uD83D\uDCC4', dart: '\uD83D\uDCC4',
+    sql: '\uD83D\uDCC4', graphql: '\uD83D\uDCC4'
   };
 
   return iconMap[ext] || '\uD83D\uDCC4';
 }
 
 function formatFileSize(bytes) {
+  if (bytes === undefined || bytes === null) return '\u2014';
   if (bytes === 0) return '0 B';
   const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
 function formatDate(timestamp) {
-  return new Date(timestamp).toLocaleDateString();
+  if (!timestamp) return '\u2014';
+  const d = new Date(timestamp);
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-async function selectFile(filePath) {
+/** Select a file and show its preview */
+function selectFile(filePath) {
   state.files.selectedFile = filePath;
 
-  // Update selection UI
+  // Update selection UI across all visible file items
   document.querySelectorAll('.file-item').forEach(item => {
     item.classList.toggle('selected', item.dataset.path === filePath);
   });
 
-  // Preview file
-  await previewFile(filePath);
+  previewFile(filePath);
 }
 
-async function previewFile(filePath) {
+/** Reset the preview panel to default empty state */
+function resetPreviewPanel() {
+  const preview = document.getElementById('file-preview');
+  if (!preview) return;
+  preview.innerHTML = `
+    <div class="empty-state">
+      <span class="empty-icon">\uD83D\uDC41\uFE0F</span>
+      <p>Select a file to preview</p>
+    </div>`;
+}
+
+// Extensions that can be previewed as text
+const TEXT_EXTENSIONS = new Set([
+  'js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h', 'hpp',
+  'swift', 'kt', 'dart', 'sh', 'bash', 'zsh', 'fish',
+  'html', 'htm', 'css', 'scss', 'less', 'sass',
+  'json', 'xml', 'yaml', 'yml', 'toml', 'ini', 'cfg',
+  'md', 'markdown', 'txt', 'log', 'csv', 'env', 'gitignore',
+  'sql', 'graphql', 'gql',
+  'dockerfile', 'makefile',
+  'vue', 'svelte'
+]);
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp']);
+
+/** Map file extension to highlight.js language name */
+function extToHljsLang(ext) {
+  const map = {
+    js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+    py: 'python', rb: 'ruby', go: 'go', rs: 'rust', java: 'java',
+    c: 'c', cpp: 'cpp', h: 'c', hpp: 'cpp',
+    swift: 'swift', kt: 'kotlin', dart: 'dart',
+    sh: 'bash', bash: 'bash', zsh: 'bash', fish: 'bash',
+    html: 'html', htm: 'html', css: 'css', scss: 'scss', less: 'less',
+    json: 'json', xml: 'xml', yaml: 'yaml', yml: 'yaml', toml: 'ini',
+    md: 'markdown', sql: 'sql', graphql: 'graphql',
+    dockerfile: 'dockerfile', makefile: 'makefile',
+    vue: 'html', svelte: 'html'
+  };
+  return map[ext] || 'plaintext';
+}
+
+/** Preview a file in the right panel */
+function previewFile(filePath) {
   const preview = document.getElementById('file-preview');
   if (!preview) return;
 
-  try {
-    const content = await ipcRenderer.invoke('files:read', filePath);
-    const ext = filePath.split('.').pop().toLowerCase();
+  const fileName = nodePath.basename(filePath);
+  const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '';
+  const escapedPath = filePath.replace(/'/g, "\\'");
 
-    if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) {
-      preview.innerHTML = `<img src="data:image/${ext};base64,${content}" style="max-width: 100%; border-radius: 8px;">`;
-    } else if (['txt', 'md', 'js', 'ts', 'py', 'html', 'css', 'json'].includes(ext)) {
+  // Image preview
+  if (IMAGE_EXTENSIONS.has(ext)) {
+    const imgSrc = 'file://' + filePath;
+    preview.innerHTML = `
+      <div class="file-preview-header">
+        <span class="preview-filename">${escapeHtml(fileName)}</span>
+        <div class="preview-actions">
+          <button class="btn-icon" onclick="openFile('${escapedPath}')" title="Open externally">\u2197\uFE0F</button>
+        </div>
+      </div>
+      <div class="file-preview-image">
+        <img src="${imgSrc}" alt="${escapeHtml(fileName)}" onerror="this.style.display='none'">
+      </div>`;
+    return;
+  }
+
+  // Text / code preview
+  if (TEXT_EXTENSIONS.has(ext) || ext === '') {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lang = extToHljsLang(ext);
+
+      // Attempt syntax highlighting via highlight.js
+      let highlighted;
+      try {
+        if (typeof hljs !== 'undefined' && lang !== 'plaintext') {
+          highlighted = hljs.highlight(content, { language: lang, ignoreIllegals: true }).value;
+        } else {
+          highlighted = escapeHtml(content);
+        }
+      } catch (_) {
+        highlighted = escapeHtml(content);
+      }
+
       preview.innerHTML = `
         <div class="file-preview-header">
-          <span>${filePath.split('/').pop()}</span>
-          <button class="btn-icon" onclick="editFile('${filePath}')">✏️</button>
+          <span class="preview-filename">${escapeHtml(fileName)}</span>
+          <div class="preview-actions">
+            <button class="btn-icon" onclick="editFile('${escapedPath}')" title="Edit">\u270F\uFE0F</button>
+            <button class="btn-icon" onclick="openFile('${escapedPath}')" title="Open externally">\u2197\uFE0F</button>
+          </div>
         </div>
-        <pre class="file-preview-content"><code>${escapeHtml(content)}</code></pre>
-      `;
-    } else {
-      preview.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-icon">\uD83D\uDCC4</span>
-          <p>Preview not available</p>
-          <button class="btn-secondary" onclick="openFile('${filePath}')">Open with Default App</button>
-        </div>
-      `;
+        <div class="file-preview-code">
+          <pre><code class="hljs language-${lang}">${highlighted}</code></pre>
+        </div>`;
+      return;
+    } catch (e) {
+      // Fall through to info card if reading fails
+      console.warn('Could not read file as text:', e.message);
     }
-  } catch (e) {
-    preview.innerHTML = `<p class="error">Failed to load preview</p>`;
   }
+
+  // Fallback: file info card for non-previewable types
+  let stats;
+  try {
+    stats = fs.statSync(filePath);
+  } catch (_) {
+    stats = null;
+  }
+
+  const mimeGuess = ext ? ('.' + ext + ' file') : 'Unknown type';
+  preview.innerHTML = `
+    <div class="file-info-card">
+      <div class="info-icon">${getFileIcon({ name: fileName, type: 'file' })}</div>
+      <div class="info-name">${escapeHtml(fileName)}</div>
+      <div class="info-table">
+        <div class="info-row">
+          <span class="info-label">Type</span>
+          <span class="info-value">${mimeGuess.toUpperCase()}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Size</span>
+          <span class="info-value">${stats ? formatFileSize(stats.size) : '\u2014'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Modified</span>
+          <span class="info-value">${stats ? formatDate(stats.mtime) : '\u2014'}</span>
+        </div>
+        <div class="info-row">
+          <span class="info-label">Path</span>
+          <span class="info-value" style="font-size:11px;word-break:break-all;">${escapeHtml(filePath)}</span>
+        </div>
+      </div>
+      <div class="info-actions">
+        <button class="btn-secondary" onclick="openFile('${escapedPath}')">Open with Default App</button>
+      </div>
+    </div>`;
 }
 
 function escapeHtml(text) {
+  if (!text) return '';
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
@@ -1746,16 +2029,17 @@ function escapeHtml(text) {
 
 function refreshFileTree() {
   if (state.files.currentPath) {
-    loadFolder(state.files.currentPath);
+    renderFileTree();
   }
 }
 
 async function createNewFolder() {
   const name = prompt('Enter folder name:');
-  if (name) {
+  if (name && state.files.currentPath) {
     try {
       await ipcRenderer.invoke('files:createFolder', state.files.currentPath, name);
       refreshFileTree();
+      showToast('Folder created', `Created "${name}"`, 'success');
     } catch (e) {
       showError('Failed to create folder');
     }
@@ -1764,14 +2048,64 @@ async function createNewFolder() {
 
 async function createNewFile() {
   const name = prompt('Enter file name:');
-  if (name) {
+  if (name && state.files.currentPath) {
     try {
       await ipcRenderer.invoke('files:createFile', state.files.currentPath, name);
       refreshFileTree();
+      showToast('File created', `Created "${name}"`, 'success');
     } catch (e) {
       showError('Failed to create file');
     }
   }
+}
+
+/** Drag-and-drop overlay and handler */
+function setupFileDragAndDrop() {
+  const container = document.getElementById('files-container');
+  const overlay = document.getElementById('files-drop-overlay');
+  if (!container || !overlay) return;
+
+  let dragCounter = 0;
+
+  container.addEventListener('dragenter', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter++;
+    overlay.classList.add('visible');
+  });
+
+  container.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+
+  container.addEventListener('dragleave', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter--;
+    if (dragCounter <= 0) {
+      dragCounter = 0;
+      overlay.classList.remove('visible');
+    }
+  });
+
+  container.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter = 0;
+    overlay.classList.remove('visible');
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      const names = files.map(f => f.name);
+      const plural = files.length === 1 ? 'file' : 'files';
+      showToast(
+        `${files.length} ${plural} dropped`,
+        names.join(', '),
+        'info'
+      );
+    }
+  });
 }
 
 // ============================================
@@ -1904,146 +2238,301 @@ function drawVoiceVisualizer() {
 
   animate();
 }
+// ============================================
+// Memory Explorer
+// ============================================
 
-// ============================================
-// Memory
-// ============================================
+/**
+ * Set up the Memory Explorer: debounced search input, filter chip toggling,
+ * and card click delegation for expand/collapse.
+ */
 function setupMemory() {
-  const searchInput = document.getElementById('memory-search');
-  const searchBtn = document.getElementById('memory-search-btn');
+  const searchInput = document.getElementById('memory-search-input');
 
+  // Debounced search (300 ms)
   if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      clearTimeout(state.memory.searchTimer);
+      const query = searchInput.value.trim();
+
+      if (!query) {
+        // Reset to empty state when input is cleared
+        state.memory.searchResults = [];
+        renderMemoryResults();
+        return;
+      }
+
+      state.memory.searchTimer = setTimeout(() => {
+        performMemorySearch(query);
+      }, 300);
+    });
+
+    // Also trigger search on Enter for immediate feedback
     searchInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        searchMemory(searchInput.value);
+        clearTimeout(state.memory.searchTimer);
+        const query = searchInput.value.trim();
+        if (query) performMemorySearch(query);
       }
     });
   }
 
-  if (searchBtn) {
-    searchBtn.addEventListener('click', () => {
-      const input = document.getElementById('memory-search');
-      if (input) searchMemory(input.value);
-    });
-  }
-
   // Filter chips
-  document.querySelectorAll('.filter-chip').forEach(chip => {
+  document.querySelectorAll('#memory-view .filter-chip').forEach(chip => {
     chip.addEventListener('click', () => {
-      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      document.querySelectorAll('#memory-view .filter-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
-      filterMemory(chip.dataset.filter);
+      state.memory.activeFilter = chip.dataset.filter;
+      renderMemoryResults();
     });
   });
-}
 
-async function loadMemory() {
-  try {
-    const conversations = await ipcRenderer.invoke('memory:conversations');
-    state.memory.conversations = conversations || [];
-    renderMemoryTimeline();
-    updateMemoryStats();
-  } catch (e) {
-    console.error('Failed to load memory:', e);
-  }
-}
+  // Delegate click on result cards for expand/collapse
+  const resultsContainer = document.getElementById('memory-results');
+  if (resultsContainer) {
+    resultsContainer.addEventListener('click', (e) => {
+      const card = e.target.closest('.memory-result-card');
+      if (!card) return;
 
-function renderMemoryTimeline() {
-  const timeline = document.getElementById('memory-timeline');
-  if (!timeline) return;
+      const idx = parseInt(card.dataset.index, 10);
+      if (isNaN(idx)) return;
 
-  if (state.memory.conversations.length === 0) {
-    timeline.innerHTML = '<p class="empty-hint">No conversations yet</p>';
-    return;
-  }
-
-  timeline.innerHTML = state.memory.conversations.map(conv => `
-    <div class="timeline-item" data-id="${conv.id}">
-      <div class="timeline-dot"></div>
-      <div class="timeline-content">
-        <div class="timeline-time">${formatTime(conv.timestamp)}</div>
-        <div class="timeline-title">${conv.message?.substring(0, 50) || 'Conversation'}...</div>
-      </div>
-    </div>
-  `).join('');
-
-  timeline.querySelectorAll('.timeline-item').forEach(item => {
-    item.addEventListener('click', () => {
-      showMemoryDetail(item.dataset.id);
+      toggleMemoryDetail(card, idx);
     });
-  });
-}
-
-function formatTime(timestamp) {
-  return new Date(timestamp).toLocaleString();
-}
-
-function updateMemoryStats() {
-  const convCount = document.getElementById('conversation-count');
-  const taskCount = document.getElementById('task-memory-count');
-
-  if (convCount) convCount.textContent = state.memory.conversations.length;
-  if (taskCount) taskCount.textContent = state.conversations.filter(c => c.role === 'task').length;
-}
-
-async function searchMemory(query) {
-  if (!query.trim()) return;
-
-  try {
-    const results = await ipcRenderer.invoke('memory:search', query);
-    displaySearchResults(results);
-  } catch (e) {
-    console.error('Search failed:', e);
   }
 }
 
-function displaySearchResults(results) {
-  const timeline = document.getElementById('memory-timeline');
-  if (!timeline || !results) return;
+/**
+ * Called when switching to the memory view. Currently a no-op since results
+ * are driven by search, but can be extended for pre-loading recent memories.
+ */
+function loadMemory() {
+  // The view starts with the empty state; user triggers search
+}
 
+/**
+ * Perform a memory search via the WebSocket backend.
+ */
+async function performMemorySearch(query) {
+  const loadingEl = document.getElementById('search-loading');
+  state.memory.isSearching = true;
+  if (loadingEl) loadingEl.style.display = '';
+
+  try {
+    const response = await wsManager.send('memory_search', { query });
+    state.memory.searchResults = Array.isArray(response) ? response :
+                                 (response && Array.isArray(response.results)) ? response.results : [];
+  } catch (err) {
+    console.error('Memory search failed:', err);
+    state.memory.searchResults = [];
+    showToast('Memory search failed', 'error');
+  } finally {
+    state.memory.isSearching = false;
+    if (loadingEl) loadingEl.style.display = 'none';
+    renderMemoryResults();
+  }
+}
+
+/**
+ * Render the memory results list, applying the active filter.
+ */
+function renderMemoryResults() {
+  const container = document.getElementById('memory-results');
+  if (!container) return;
+
+  const filter = state.memory.activeFilter;
+  let results = state.memory.searchResults;
+
+  // Apply filter
+  if (filter === 'success') {
+    results = results.filter(r => r.success === true || r.outcome === 'success');
+  } else if (filter === 'failed') {
+    results = results.filter(r => r.success === false || r.outcome === 'failed');
+  }
+
+  // Empty state
   if (results.length === 0) {
-    timeline.innerHTML = '<p class="empty-hint">No results found</p>';
+    if (state.memory.searchResults.length === 0 && !state.memory.isSearching) {
+      const searchInput = document.getElementById('memory-search-input');
+      const hasQuery = searchInput && searchInput.value.trim();
+
+      if (hasQuery) {
+        container.innerHTML = `
+          <div class="no-results">
+            <div class="no-results-icon">🔍</div>
+            <p>No results found</p>
+          </div>`;
+      } else {
+        container.innerHTML = `
+          <div class="empty-state">
+            <span class="empty-icon">🧠</span>
+            <p>Search your agent's memory</p>
+            <p class="empty-hint">Try searching for past tasks or topics</p>
+          </div>`;
+      }
+    } else if (state.memory.searchResults.length > 0) {
+      container.innerHTML = `
+        <div class="no-results">
+          <div class="no-results-icon">🔍</div>
+          <p>No ${filter} results</p>
+        </div>`;
+    }
     return;
   }
 
-  timeline.innerHTML = results.map(result => `
-    <div class="timeline-item" data-id="${result.id}">
-      <div class="timeline-dot search-result"></div>
-      <div class="timeline-content">
-        <div class="timeline-time">${formatTime(result.timestamp)}</div>
-        <div class="timeline-title">${result.message?.substring(0, 50) || 'Result'}...</div>
-        <div class="timeline-match">Match: ${result.similarity?.toFixed(2) || 'N/A'}</div>
-      </div>
-    </div>
-  `).join('');
+  container.innerHTML = results.map((result, idx) => {
+    const isSuccess = result.success === true || result.outcome === 'success';
+    const badgeClass = isSuccess ? 'success' : 'failed';
+    const badgeLabel = isSuccess ? 'Success' : 'Failed';
+    const taskName = escapeHtml(result.task || 'Untitled Task');
+    const excerpt = escapeHtml(getExcerpt(result.observations, 100));
+    const relTime = formatRelativeTime(result.timestamp);
+    const similarity = (typeof result.similarity === 'number')
+      ? `<span class="result-similarity">${Math.round(result.similarity * 100)}% match</span>`
+      : '';
+
+    return `
+      <div class="memory-result-card" data-index="${idx}">
+        <div class="result-header">
+          <span class="result-task">${taskName}</span>
+          <span class="outcome-badge ${badgeClass}">${badgeLabel}</span>
+        </div>
+        <div class="result-meta">
+          <span class="result-timestamp">${relTime}</span>
+          ${similarity}
+        </div>
+        <div class="result-excerpt">${excerpt}</div>
+      </div>`;
+  }).join('');
 }
 
-function filterMemory(filter) {
-  // Filter the timeline based on type
-  console.log('Filter by:', filter);
+/**
+ * Toggle expand/collapse of a memory result card.
+ */
+function toggleMemoryDetail(card, idx) {
+  // If already expanded, collapse
+  if (card.classList.contains('expanded')) {
+    card.classList.remove('expanded');
+    const details = card.querySelector('.result-details');
+    if (details) details.remove();
+    return;
+  }
+
+  // Collapse any other expanded card
+  document.querySelectorAll('.memory-result-card.expanded').forEach(c => {
+    c.classList.remove('expanded');
+    const d = c.querySelector('.result-details');
+    if (d) d.remove();
+  });
+
+  // Build detail HTML using the filtered results list
+  const filter = state.memory.activeFilter;
+  let results = state.memory.searchResults;
+  if (filter === 'success') {
+    results = results.filter(r => r.success === true || r.outcome === 'success');
+  } else if (filter === 'failed') {
+    results = results.filter(r => r.success === false || r.outcome === 'failed');
+  }
+
+  const result = results[idx];
+  if (!result) return;
+
+  let detailsHTML = '<div class="result-details">';
+
+  // Observations
+  const observations = parseObservations(result.observations);
+  if (observations.length > 0) {
+    detailsHTML += `
+      <div class="detail-section">
+        <h4>Observations</h4>
+        <ul class="observations-list">
+          ${observations.map(o => `<li>${escapeHtml(o)}</li>`).join('')}
+        </ul>
+      </div>`;
+  }
+
+  // Task steps (if available)
+  const steps = Array.isArray(result.steps) ? result.steps :
+                (typeof result.steps === 'string' ? result.steps.split('\n').filter(Boolean) : []);
+  if (steps.length > 0) {
+    detailsHTML += `
+      <div class="detail-section">
+        <h4>Task Steps</h4>
+        <ol class="steps-list">
+          ${steps.map(s => `<li>${escapeHtml(s)}</li>`).join('')}
+        </ol>
+      </div>`;
+  }
+
+  // Similarity score
+  if (typeof result.similarity === 'number') {
+    const pct = Math.round(result.similarity * 100);
+    detailsHTML += `
+      <div class="detail-section">
+        <h4>Similarity Score</h4>
+        <div class="detail-similarity">
+          <div class="similarity-bar">
+            <div class="similarity-fill" style="width: ${pct}%"></div>
+          </div>
+          <span>${pct}%</span>
+        </div>
+      </div>`;
+  }
+
+  detailsHTML += '</div>';
+
+  card.classList.add('expanded');
+  card.insertAdjacentHTML('beforeend', detailsHTML);
 }
 
-function showMemoryDetail(id) {
-  const detail = document.getElementById('memory-detail');
-  if (!detail) return;
+// --- Memory helper: extract excerpt from observations ---
+function getExcerpt(observations, maxLen) {
+  if (!observations) return '';
+  if (typeof observations === 'string') return observations.substring(0, maxLen);
+  if (Array.isArray(observations)) {
+    return observations.join('; ').substring(0, maxLen);
+  }
+  return String(observations).substring(0, maxLen);
+}
 
-  const item = state.memory.conversations.find(c => c.id === id);
-  if (!item) return;
+// --- Memory helper: parse observations into an array ---
+function parseObservations(observations) {
+  if (!observations) return [];
+  if (Array.isArray(observations)) return observations;
+  if (typeof observations === 'string') {
+    return observations.split(/[;\n]+/).map(s => s.trim()).filter(Boolean);
+  }
+  return [String(observations)];
+}
 
-  detail.innerHTML = `
-    <div class="memory-detail-content">
-      <h4>Conversation</h4>
-      <div class="detail-message user">
-        <strong>You:</strong> ${item.message || 'N/A'}
-      </div>
-      <div class="detail-message assistant">
-        <strong>Agent:</strong> ${item.response || 'N/A'}
-      </div>
-      <div class="detail-meta">
-        <span>${formatTime(item.timestamp)}</span>
-      </div>
-    </div>
-  `;
+// --- Memory helper: format a timestamp into a human-friendly relative string ---
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return '';
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  if (isNaN(then)) return '';
+
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffSec < 60) return 'just now';
+  if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? 's' : ''} ago`;
+  if (diffHr < 24) return `${diffHr} hour${diffHr !== 1 ? 's' : ''} ago`;
+  if (diffDay === 1) return 'yesterday';
+  if (diffDay < 7) return `${diffDay} days ago`;
+  if (diffDay < 30) {
+    const weeks = Math.floor(diffDay / 7);
+    return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+  }
+  if (diffDay < 365) {
+    const months = Math.floor(diffDay / 30);
+    return `${months} month${months !== 1 ? 's' : ''} ago`;
+  }
+  const years = Math.floor(diffDay / 365);
+  return `${years} year${years !== 1 ? 's' : ''} ago`;
 }
 
 // ============================================
