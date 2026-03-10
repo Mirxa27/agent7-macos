@@ -497,7 +497,9 @@ class ToolLibrary:
         """Write file"""
         try:
             # Create directory if needed
-            os.makedirs(os.path.dirname(path), exist_ok=True)
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -546,9 +548,11 @@ class ToolLibrary:
             data = json.loads(content)
 
             if schema:
-                # Basic schema validation
-                # In production, use jsonschema library
-                pass
+                try:
+                    import jsonschema
+                    jsonschema.validate(instance=data, schema=schema)
+                except Exception as ve:
+                    return {"error": f"Schema validation failed: {str(ve)}", "valid": False}
 
             return {"data": data, "valid": True}
 

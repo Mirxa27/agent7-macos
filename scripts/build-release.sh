@@ -15,6 +15,12 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Check for GH_TOKEN
+if [ -z "$GH_TOKEN" ]; then
+    echo -e "${YELLOW}⚠️  GH_TOKEN not set - releases won't be published to GitHub${NC}"
+    echo -e "${YELLOW}   Set GH_TOKEN environment variable to enable auto-publishing${NC}"
+fi
+
 # Check environment variables
 if [ -z "$APPLE_ID" ]; then
     echo -e "${RED}❌ APPLE_ID environment variable not set${NC}"
@@ -84,8 +90,21 @@ echo "🔨 Building application..."
 echo "This will build, sign, and notarize the app..."
 echo ""
 
-# Build with notarization
-npm run build:mac
+# Build and publish to GitHub
+if [ -n "$GH_TOKEN" ]; then
+    echo -e "${BLUE}📤 Building and publishing to GitHub...${NC}"
+    GH_TOKEN=$GH_TOKEN npm run build:mac:publish
+# Verify that latest-mac.yml was generated
+if [ -f "dist/mac/latest-mac.yml" ]; then
+  echo -e "${GREEN}✅ latest-mac.yml generated and uploaded${NC}"
+else
+  echo -e "${YELLOW}⚠️  latest-mac.yml not found after publish – generating without upload${NC}"
+  npx electron-builder --mac --publish never
+fi
+else
+    echo -e "${BLUE}📦 Building locally (no publish)...${NC}"
+    npm run build:mac
+fi
 
 echo ""
 echo "📦 Creating DMG..."
@@ -107,10 +126,24 @@ ls -lh dist/*.zip 2>/dev/null || echo "  No ZIP files found"
 echo ""
 echo "🚀 Ready for release!"
 echo ""
-echo "To release to GitHub, run:"
-echo "  npm run build:mac:publish"
-echo ""
-echo "Or manually upload the files from dist/ to GitHub Releases"
+if [ -n "$GH_TOKEN" ]; then
+    echo -e "${GREEN}✅ Artifacts have been auto-published to GitHub Releases${NC}"
+    echo "   The latest-mac.yml manifest was generated for auto-updates"
+else
+    echo -e "${YELLOW}📤 To publish to GitHub, either:${NC}"
+    echo "   1. Re-run this script with GH_TOKEN set:"
+    echo "      GH_TOKEN=your_token ./scripts/build-release.sh"
+    echo "   2. Or manually upload the files from dist/ to GitHub Releases"
+    echo ""
+    echo -e "${YELLOW}   Note: Manual upload requires also uploading latest-mac.yml for auto-updates${NC}"
+# Generate latest-mac.yml for manual upload if missing
+if [ -f "dist/mac/latest-mac.yml" ]; then
+  echo -e "${GREEN}✅ latest-mac.yml already present${NC}"
+else
+  echo -e "${YELLOW}⚠️  Generating latest-mac.yml for manual upload${NC}"
+  npx electron-builder --mac --publish never
+fi
+fi
 
 # Create release notes template
 cat > dist/RELEASE_NOTES.md << 'EOF'

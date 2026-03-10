@@ -1,0 +1,745 @@
+/* ==========================================================================
+   Agents — Card Grid, Detail Panel, Flow View, Status Indicators
+   ========================================================================== */
+
+/* --- View Toggle Buttons --- */
+.agents-view-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 2px;
+}
+
+.agents-view-toggle .toggle-btn {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.agents-view-toggle .toggle-btn.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.agents-view-toggle .toggle-btn:hover:not(.active) {
+  color: var(--text-primary);
+}
+
+/* --- Agents Container (scrollable body) --- */
+.agents-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  position: relative;
+}
+
+/* --- Agent Card Grid --- */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--spacing-md);
+}
+
+.agents-grid.hidden {
+  display: none;
+}
+
+/* --- Agent Card --- */
+.agent-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  cursor: pointer;
+  transition: var(--transition-fast);
+  position: relative;
+  overflow: hidden;
+}
+
+.agent-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.agent-card.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.2);
+}
+
+/* Card Header: icon + name + type */
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.agent-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.agent-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-card-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+/* Card Stats Row */
+.agent-card-stats {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.agent-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agent-stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.agent-stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Card Footer: status badge */
+.agent-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* --- Status Badge --- */
+.agent-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.agent-status-badge .status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Idle (gray) */
+.agent-status-badge.status-idle {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.agent-status-badge.status-idle .status-indicator {
+  background: var(--text-tertiary);
+}
+
+/* Ready (gray, same as idle) */
+.agent-status-badge.status-ready {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.agent-status-badge.status-ready .status-indicator {
+  background: var(--text-tertiary);
+}
+
+/* Busy (blue) */
+.agent-status-badge.status-busy {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary);
+}
+
+.agent-status-badge.status-busy .status-indicator {
+  background: var(--primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Error (red) */
+.agent-status-badge.status-error {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--danger);
+}
+
+.agent-status-badge.status-error .status-indicator {
+  background: var(--danger);
+}
+
+/* ==========================================================================
+   Agent Detail Panel (slide-in from right)
+   ========================================================================== */
+.agent-detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 400px;
+  max-width: 90vw;
+  background: var(--bg-primary);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.agent-detail-panel.open {
+  transform: translateX(0);
+}
+
+/* Panel overlay backdrop */
+.agent-detail-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 199;
+}
+
+.agent-detail-overlay.visible {
+  display: block;
+}
+
+/* Detail Header */
+.agent-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-lg);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.agent-detail-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  min-width: 0;
+}
+
+.agent-detail-title .agent-card-icon {
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+}
+
+.agent-detail-title-text h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.agent-detail-title-text .agent-detail-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.agent-detail-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.agent-detail-close:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Detail Body */
+.agent-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+}
+
+/* Status Row */
+.agent-detail-status-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+}
+
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.live-dot.idle,
+.live-dot.ready {
+  background: var(--text-tertiary);
+}
+
+.live-dot.busy {
+  background: var(--primary);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.live-dot.error {
+  background: var(--danger);
+}
+
+.agent-detail-status-label {
+  font-size: 14px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* Stats Grid */
+.agent-detail-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.detail-stat-card {
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  text-align: center;
+}
+
+.detail-stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.detail-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Section headings */
+.agent-detail-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-sm);
+}
+
+/* Task History List */
+.agent-task-history {
+  margin-bottom: var(--spacing-lg);
+}
+
+.task-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.task-history-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.task-history-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.task-history-outcome {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.task-history-outcome.success {
+  background: rgba(52, 199, 89, 0.1);
+  color: var(--success);
+}
+
+.task-history-outcome.failed {
+  background: rgba(255, 59, 48, 0.1);
+  color: var(--danger);
+}
+
+.task-history-outcome.running {
+  background: rgba(0, 122, 255, 0.1);
+  color: var(--primary);
+}
+
+.task-history-time {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.task-history-empty {
+  text-align: center;
+  padding: var(--spacing-lg);
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Manual Task Assignment */
+.agent-assign-task {
+  margin-top: auto;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border);
+}
+
+.agent-assign-task .agent-detail-section-title {
+  margin-bottom: var(--spacing-sm);
+}
+
+.assign-task-row {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.assign-task-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  outline: none;
+  font-family: inherit;
+}
+
+.assign-task-input:focus {
+  border-color: var(--primary);
+}
+
+.assign-task-btn {
+  padding: 10px 16px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.assign-task-btn:hover {
+  background: var(--primary-hover);
+}
+
+.assign-task-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==========================================================================
+   Orchestration Flow View
+   ========================================================================== */
+.agents-flow-view {
+  display: none;
+  padding: var(--spacing-lg);
+}
+
+.agents-flow-view.active {
+  display: block;
+}
+
+.flow-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl) var(--spacing-lg);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.flow-empty-icon {
+  font-size: 48px;
+  margin-bottom: var(--spacing-md);
+  opacity: 0.5;
+}
+
+.flow-empty-state p {
+  font-size: 14px;
+  margin-bottom: var(--spacing-xs);
+}
+
+.flow-empty-hint {
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* Flow Pipeline */
+.flow-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Flow Step */
+.flow-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md) 0;
+}
+
+/* Connector arrow between steps (CSS pseudo-element) */
+.flow-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 19px;
+  top: 56px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--border);
+}
+
+/* Step number / indicator circle */
+.flow-step-indicator {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  border: 2px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  transition: var(--transition-fast);
+}
+
+/* Pending step */
+.flow-step.step-pending .flow-step-indicator {
+  border-color: var(--border);
+  background: var(--bg-primary);
+  color: var(--text-tertiary);
+}
+
+/* Current step (blue highlight) */
+.flow-step.step-executing .flow-step-indicator {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: white;
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.15);
+}
+
+.flow-step.step-executing::after {
+  background: var(--primary);
+}
+
+/* Completed step (green) */
+.flow-step.step-completed .flow-step-indicator {
+  border-color: var(--success);
+  background: var(--success);
+  color: white;
+}
+
+.flow-step.step-completed::after {
+  background: var(--success);
+}
+
+/* Failed step (red) */
+.flow-step.step-failed .flow-step-indicator {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: white;
+}
+
+/* Step content box */
+.flow-step-content {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+  min-width: 0;
+  transition: var(--transition-fast);
+}
+
+.flow-step.step-executing .flow-step-content {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.1);
+}
+
+.flow-step.step-completed .flow-step-content {
+  border-color: var(--success);
+  opacity: 0.85;
+}
+
+.flow-step.step-failed .flow-step-content {
+  border-color: var(--danger);
+}
+
+.flow-step.step-pending .flow-step-content {
+  opacity: 0.5;
+}
+
+.flow-step-desc {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.flow-step-agent {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.flow-step-status-label {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-top: 6px;
+}
+
+.flow-step.step-executing .flow-step-status-label {
+  color: var(--primary);
+}
+
+.flow-step.step-completed .flow-step-status-label {
+  color: var(--success);
+}
+
+.flow-step.step-failed .flow-step-status-label {
+  color: var(--danger);
+}
+
+.flow-step.step-pending .flow-step-status-label {
+  color: var(--text-tertiary);
+}
+
+/* Flow Header (summary) */
+.flow-header {
+  text-align: center;
+  margin-bottom: var(--spacing-lg);
+}
+
+.flow-header h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.flow-header p {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Spinning indicator for executing flow step */
+.flow-step.step-executing .flow-step-indicator::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: var(--primary);
+  animation: spin 1s linear infinite;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 899px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-detail-panel {
+    width: 100%;
+  }
+
+  .flow-pipeline {
+    max-width: 100%;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1200px) {
+  .agents-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}

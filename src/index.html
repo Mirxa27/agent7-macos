@@ -1,21 +1,46 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Agent7</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/layout.css">
+  <link rel="stylesheet" href="styles/components.css">
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/agents.css">
+  <link rel="stylesheet" href="styles/browser.css">
+  <link rel="stylesheet" href="styles/files.css">
+  <link rel="stylesheet" href="styles/memory.css">
+  <link rel="stylesheet" href="styles/settings.css">
+  <link rel="stylesheet" href="styles/workflows.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.8.0/lib/highlight.min.js"></script>
 </head>
+
 <body>
+  <div class="toast-container" id="toast-container"></div>
+  <!-- Hamburger bar for narrow viewports -->
+  <div class="hamburger-bar" id="hamburger-bar">
+    <button class="hamburger-btn" id="hamburger-toggle" aria-label="Toggle sidebar">&#9776;</button>
+    <span class="hamburger-title">Agent7</span>
+  </div>
+  <!-- Sidebar overlay backdrop -->
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
   <div id="app">
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <span class="logo-icon">🤖</span>
+          <div class="logo-icon">🤖</div>
           <span class="logo-text">Agent7</span>
         </div>
-        <div class="autonomous-toggle">
+        <button class="sidebar-collapse-btn" id="sidebar-collapse" title="Collapse Sidebar">&#x2039;</button>
+      </div>
+      <div class="sidebar-auto-toggle">
+        <div class="autonomous-toggle" title="Toggle Autonomous Mode">
           <label class="switch">
             <input type="checkbox" id="autonomous-mode">
             <span class="slider"></span>
@@ -23,7 +48,7 @@
           <span class="toggle-label">Auto</span>
         </div>
       </div>
-      
+
       <nav class="sidebar-nav">
         <button class="nav-item active" data-view="chat">
           <span class="nav-icon">💬</span>
@@ -32,7 +57,7 @@
         <button class="nav-item" data-view="agents">
           <span class="nav-icon">👥</span>
           <span>Agents</span>
-          <span class="badge" id="agent-count">0</span>
+          <span class="badge" id="agent-count">7</span>
         </button>
         <button class="nav-item" data-view="workflows">
           <span class="nav-icon">⚡</span>
@@ -51,8 +76,12 @@
           <span>Files</span>
         </button>
       </nav>
-      
+
       <div class="sidebar-footer">
+        <div class="connection-status" id="connection-status">
+          <span class="status-dot offline"></span>
+          <span class="status-text">Disconnected</span>
+        </div>
         <button class="nav-item" data-view="settings">
           <span class="nav-icon">⚙️</span>
           <span>Settings</span>
@@ -66,57 +95,72 @@
       <div class="view active" id="chat-view">
         <div class="chat-container">
           <div class="chat-header">
-            <h2>Agent7 Assistant</h2>
+            <div class="chat-title">
+              <h2>Agent7 Assistant</h2>
+              <span class="model-indicator" id="current-model">GPT-4o</span>
+            </div>
             <div class="header-actions">
+              <button class="btn-icon" id="voice-input-btn" title="Voice Input">
+                <span class="voice-icon">🎤</span>
+              </button>
               <button class="btn-icon" id="clear-chat" title="Clear Chat">🗑️</button>
-              <button class="btn-icon" id="export-chat" title="Export">📥</button>
+              <button class="btn-icon" id="export-chat" title="Export Chat">📥</button>
             </div>
           </div>
-          
+
           <div class="chat-messages" id="chat-messages">
-            <div class="message system">
+            <div class="message system welcome-message">
               <div class="message-content">
-                <p>Welcome to <strong>Agent7</strong> - Your Advanced AI Agent</p>
-                <p class="hint">I can help you with complex tasks using multiple specialized agents. Try asking me to:</p>
-                <ul class="hints">
-                  <li>Research and summarize a topic</li>
-                  <li>Automate browser tasks</li>
-                  <li>Write and execute code</li>
-                  <li>Manage files and workflows</li>
-                </ul>
+                <h3>Welcome to Agent7</h3>
+                <p>Your advanced AI agent for complex multi-step tasks.</p>
+                <div class="capabilities">
+                  <div class="capability"><span class="cap-icon">🔍</span><span>Research</span></div>
+                  <div class="capability"><span class="cap-icon">🌐</span><span>Browser</span></div>
+                  <div class="capability"><span class="cap-icon">💻</span><span>Code</span></div>
+                  <div class="capability"><span class="cap-icon">📊</span><span>Data</span></div>
+                </div>
+                <p class="hint">Try: "Research the latest AI developments"</p>
               </div>
             </div>
           </div>
-          
+
           <div class="chat-input-container">
+            <input type="file" class="hidden-file-input" id="file-input" multiple>
             <div class="input-toolbar">
               <button class="toolbar-btn" id="attach-file" title="Attach File">📎</button>
               <button class="toolbar-btn" id="screenshot" title="Screenshot">📸</button>
-              <button class="toolbar-btn" id="voice-input" title="Voice Input">🎤</button>
-              <div class="toolbar-divider"></div>
-              <button class="toolbar-btn" id="agent-selector" title="Select Agent">👤</button>
+              <button class="toolbar-btn" id="mention-agent" title="Mention Agent">@</button>
+              <span class="toolbar-divider"></span>
+              <select class="model-selector" id="model-selector" title="Select Model">
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="bedrock-claude">Bedrock Claude</option>
+              </select>
             </div>
             <div class="input-wrapper">
-              <textarea 
-                id="chat-input" 
-                placeholder="Type a message or task... (Cmd+Enter to send)"
-                rows="1"
-              ></textarea>
-              <button class="send-btn" id="send-message">
-                <span>➤</span>
-              </button>
+              <textarea id="chat-input" placeholder="Type a message or task... (Cmd+Enter to send)" rows="1"></textarea>
+              <div class="input-actions">
+                <span class="char-count" id="char-count">0/4000</span>
+                <button class="send-btn" id="send-message" title="Send Message">➤</button>
+              </div>
             </div>
           </div>
         </div>
-        
-        <!-- Task Panel -->
+
         <div class="task-panel" id="task-panel">
           <div class="panel-header">
             <h3>Active Tasks</h3>
             <button class="btn-icon" id="collapse-panel">−</button>
           </div>
           <div class="task-list" id="task-list">
-            <!-- Tasks will be added here dynamically -->
+            <div class="empty-state">
+              <span class="empty-icon">📋</span>
+              <p>No active tasks</p>
+              <p class="empty-hint">Type a task below to get started</p>
+              <button class="btn-primary" style="margin-top: 12px;"
+                onclick="document.getElementById('chat-input').focus()">Start a Task</button>
+            </div>
           </div>
         </div>
       </div>
@@ -124,81 +168,281 @@
       <!-- Agents View -->
       <div class="view" id="agents-view">
         <div class="view-header">
-          <h2>Specialized Agents</h2>
-          <button class="btn-primary" id="create-agent">+ Create Agent</button>
+          <div class="header-title">
+            <h2>Agents</h2>
+            <p class="header-subtitle" id="agents-subtitle">Manage and monitor your AI agents</p>
+          </div>
+          <div class="header-actions">
+            <div class="agents-view-toggle" id="agents-view-toggle">
+              <button class="toggle-btn active" data-agents-view="grid">Grid</button>
+              <button class="toggle-btn" data-agents-view="flow">Flow</button>
+            </div>
+          </div>
         </div>
-        <div class="agents-grid" id="agents-grid">
-          <!-- Agents will be populated here -->
+        <div class="agents-body">
+          <!-- Card Grid (default) -->
+          <div class="agents-grid" id="agents-grid"></div>
+          <!-- Orchestration Flow View -->
+          <div class="agents-flow-view" id="agents-flow-view">
+            <div class="flow-empty-state" id="flow-empty-state">
+              <span class="flow-empty-icon">&#9881;</span>
+              <p>No orchestration running</p>
+              <p class="flow-empty-hint">Start a multi-step task from the chat to see the pipeline here.</p>
+            </div>
+            <div class="flow-pipeline" id="flow-pipeline" style="display:none;"></div>
+          </div>
+        </div>
+        <!-- Detail Panel (slide-in) -->
+        <div class="agent-detail-overlay" id="agent-detail-overlay"></div>
+        <div class="agent-detail-panel" id="agent-detail-panel">
+          <div class="agent-detail-header">
+            <div class="agent-detail-title">
+              <div class="agent-card-icon" id="detail-agent-icon"></div>
+              <div class="agent-detail-title-text">
+                <h3 id="detail-agent-name">Agent</h3>
+                <span class="agent-detail-type" id="detail-agent-type">type</span>
+              </div>
+            </div>
+            <button class="agent-detail-close" id="agent-detail-close" title="Close">&times;</button>
+          </div>
+          <div class="agent-detail-body">
+            <div class="agent-detail-status-row">
+              <span class="live-dot" id="detail-live-dot"></span>
+              <span class="agent-detail-status-label" id="detail-status-label">idle</span>
+            </div>
+            <div class="agent-detail-stats">
+              <div class="detail-stat-card">
+                <div class="detail-stat-value" id="detail-tasks-completed">0</div>
+                <div class="detail-stat-label">Tasks Done</div>
+              </div>
+              <div class="detail-stat-card">
+                <div class="detail-stat-value" id="detail-success-rate">0%</div>
+                <div class="detail-stat-label">Success Rate</div>
+              </div>
+            </div>
+            <div class="agent-task-history">
+              <div class="agent-detail-section-title">Recent Tasks</div>
+              <div class="task-history-list" id="detail-task-history">
+                <div class="task-history-empty">No task history yet</div>
+              </div>
+            </div>
+            <div class="agent-assign-task">
+              <div class="agent-detail-section-title">Assign Task</div>
+              <div class="assign-task-row">
+                <input type="text" class="assign-task-input" id="assign-task-input" placeholder="Describe a task...">
+                <button class="assign-task-btn" id="assign-task-btn">Assign</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Workflows View -->
       <div class="view" id="workflows-view">
         <div class="view-header">
-          <h2>Workflow Automation</h2>
-          <button class="btn-primary" id="create-workflow">+ Create Workflow</button>
+          <div class="header-title">
+            <h2>Workflows</h2>
+            <p class="header-subtitle">Automate multi-step tasks</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-primary" id="new-workflow-btn">+ New Workflow</button>
+          </div>
         </div>
         <div class="workflows-list" id="workflows-list">
-          <!-- Workflows will be listed here -->
+          <div class="empty-state">
+            <span class="empty-icon">&#9889;</span>
+            <p>No workflows yet</p>
+            <p class="empty-hint">Create your first automated workflow</p>
+            <button class="btn-primary" style="margin-top: 12px;"
+              onclick="document.getElementById('new-workflow-btn').click()">Create Workflow</button>
+          </div>
         </div>
       </div>
 
-      <!-- Memory View -->
-      <div class="view" id="memory-view">
-        <div class="view-header">
-          <h2>Memory & Context</h2>
-          <div class="search-box">
-            <input type="text" id="memory-search" placeholder="Search memory...">
-            <button class="btn-icon">🔍</button>
+      <!-- Workflow Create/Edit Modal -->
+      <div class="modal workflow-modal" id="workflow-modal">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3 id="workflow-modal-title">New Workflow</h3>
+            <button class="close-modal" onclick="closeModal('workflow-modal')">&times;</button>
           </div>
-        </div>
-        <div class="memory-container">
-          <div class="memory-section">
-            <h3>Conversations</h3>
-            <div class="memory-list" id="conversations-list"></div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="workflow-name">Name</label>
+              <input type="text" id="workflow-name" placeholder="e.g. Daily Research Report">
+            </div>
+            <div class="form-group">
+              <label>Trigger</label>
+              <div class="trigger-group">
+                <div class="trigger-option">
+                  <input type="radio" name="workflow-trigger" id="trigger-manual" value="manual" checked>
+                  <label for="trigger-manual">
+                    <span class="trigger-icon">&#9654;</span>
+                    Manual
+                  </label>
+                </div>
+                <div class="trigger-option">
+                  <input type="radio" name="workflow-trigger" id="trigger-schedule" value="schedule">
+                  <label for="trigger-schedule">
+                    <span class="trigger-icon">&#128339;</span>
+                    Schedule
+                  </label>
+                </div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="step-editor-label">Steps</label>
+              <div class="step-list" id="step-list"></div>
+              <button class="add-step-btn" id="add-step-btn">+ Add Step</button>
+            </div>
           </div>
-          <div class="memory-section">
-            <h3>Tasks</h3>
-            <div class="memory-list" id="tasks-list"></div>
-          </div>
-          <div class="memory-section">
-            <h3>Knowledge Base</h3>
-            <div class="memory-list" id="knowledge-list"></div>
+          <div class="modal-footer">
+            <button class="btn-secondary" onclick="closeModal('workflow-modal')">Cancel</button>
+            <button class="btn-primary" id="save-workflow-btn">Save Workflow</button>
           </div>
         </div>
       </div>
 
       <!-- Browser View -->
       <div class="view" id="browser-view">
-        <div class="browser-container">
+        <div class="browser-view-container">
+          <div class="browser-tabs" id="browser-tabs">
+            <div class="tab active" data-tab-id="1">
+              <span class="tab-favicon">🌐</span>
+              <span class="tab-title">New Tab</span>
+              <button class="tab-close">×</button>
+            </div>
+            <button class="new-tab-btn" id="new-tab">+</button>
+          </div>
+
           <div class="browser-toolbar">
             <div class="browser-nav">
-              <button class="btn-icon" id="browser-back">←</button>
-              <button class="btn-icon" id="browser-forward">→</button>
-              <button class="btn-icon" id="browser-refresh">↻</button>
+              <button class="btn-icon" id="browser-back" title="Back">←</button>
+              <button class="btn-icon" id="browser-forward" title="Forward">→</button>
+              <button class="btn-icon" id="browser-refresh" title="Reload">↻</button>
+              <button class="btn-icon" id="browser-home" title="Home">🏠</button>
             </div>
-            <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL...">
+            <div class="browser-address-bar">
+              <span class="security-icon" id="security-icon">🔒</span>
+              <input type="text" class="browser-url" id="browser-url" placeholder="Enter URL or search...">
+              <button class="btn-icon" id="browser-go" title="Go">➜</button>
+            </div>
             <div class="browser-actions">
-              <button class="btn-secondary" id="browser-automate">🤖 Automate</button>
-              <button class="btn-secondary" id="browser-screenshot">📸 Screenshot</button>
+              <button class="btn-icon" id="browser-screenshot" title="Take Screenshot">📸</button>
+              <button class="btn-icon" id="browser-automate" title="Toggle Automation Panel">🤖</button>
             </div>
           </div>
-          <div class="browser-content">
-            <div class="browser-webview" id="browser-webview">
-              <div class="placeholder">
-                <p>Enter a URL to start browsing</p>
-                <p class="hint">Or use the chat to automate browser tasks</p>
-              </div>
+
+          <div class="webview-container" id="webview-container">
+            <div class="browser-loading-bar" id="browser-loading-bar" style="width: 0%;"></div>
+            <webview id="browser-webview" src="about:blank" autosize="on" allowpopups></webview>
+            <div class="browser-loading" id="browser-loading" style="display: none;">
+              <div class="loading-spinner"></div>
+              <span>Loading...</span>
             </div>
-            <div class="browser-panel" id="browser-panel">
-              <h3>Browser Tools</h3>
-              <div class="tool-grid">
-                <button class="tool-btn" data-tool="navigate">🌐 Navigate</button>
-                <button class="tool-btn" data-tool="click">👆 Click</button>
-                <button class="tool-btn" data-tool="type">⌨️ Type</button>
-                <button class="tool-btn" data-tool="extract">📄 Extract</button>
-                <button class="tool-btn" data-tool="screenshot">📸 Screenshot</button>
-                <button class="tool-btn" data-tool="scroll">📜 Scroll</button>
+          </div>
+
+          <div class="browser-panel" id="browser-panel">
+            <div class="panel-tabs">
+              <button class="panel-tab active" data-panel="automation">Automation</button>
+              <button class="panel-tab" data-panel="console">Console</button>
+              <button class="panel-tab" data-panel="elements">Elements</button>
+              <button class="panel-toggle-btn" id="panel-toggle" title="Toggle Panel">▾</button>
+            </div>
+            <div class="panel-content">
+              <!-- Automation Panel -->
+              <div class="panel-section active" id="automation-panel">
+                <div class="automation-tools">
+                  <button class="tool-btn" data-action="click"><span>👆</span> Click</button>
+                  <button class="tool-btn" data-action="type"><span>⌨️</span> Type</button>
+                  <button class="tool-btn" data-action="extract"><span>📄</span> Extract</button>
+                  <button class="tool-btn" data-action="scroll"><span>📜</span> Scroll</button>
+                  <button class="tool-btn" data-action="screenshot"><span>📸</span> Screenshot</button>
+                  <button class="tool-btn" data-action="auto-task"><span>🤖</span> Auto Task</button>
+                </div>
+
+                <!-- Click Tool Form -->
+                <div class="automation-form" id="form-click">
+                  <div class="automation-form-header">
+                    <h5>Click Element</h5>
+                    <button class="automation-form-close" data-close-form="form-click">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="click-selector"
+                      placeholder="e.g. #submit-btn, .login-link, button[type=submit]">
+                    <button class="automation-form-btn" id="click-go-btn">Click</button>
+                  </div>
+                </div>
+
+                <!-- Type Tool Form -->
+                <div class="automation-form" id="form-type">
+                  <div class="automation-form-header">
+                    <h5>Type Text</h5>
+                    <button class="automation-form-close" data-close-form="form-type">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="type-selector" placeholder="e.g. #email, input[name=search]">
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Text</span>
+                    <input type="text" id="type-text" placeholder="Text to type...">
+                    <button class="automation-form-btn" id="type-go-btn">Type</button>
+                  </div>
+                </div>
+
+                <!-- Extract Tool Form -->
+                <div class="automation-form" id="form-extract">
+                  <div class="automation-form-header">
+                    <h5>Extract Content</h5>
+                    <button class="automation-form-close" data-close-form="form-extract">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Selector</span>
+                    <input type="text" id="extract-selector"
+                      placeholder="e.g. .article-body, table, h1 (leave empty for full page)">
+                    <button class="automation-form-btn" id="extract-go-btn">Extract</button>
+                  </div>
+                  <div class="extract-results" id="extract-results"></div>
+                </div>
+
+                <!-- Auto Task Form -->
+                <div class="automation-form" id="form-auto-task">
+                  <div class="automation-form-header">
+                    <h5>Automated Task</h5>
+                    <button class="automation-form-close" data-close-form="form-auto-task">×</button>
+                  </div>
+                  <div class="form-row">
+                    <span class="form-label">Task</span>
+                    <input type="text" id="auto-task-input"
+                      placeholder="e.g. Log in with user@example.com, search for flights to NYC...">
+                    <button class="automation-form-btn" id="auto-task-go-btn">Run</button>
+                  </div>
+                  <div class="auto-task-status" id="auto-task-status">
+                    <div class="loading-spinner"></div>
+                    <span id="auto-task-status-text">Running task...</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Console Panel -->
+              <div class="panel-section" id="console-panel">
+                <div class="console-output" id="console-output">
+                  <div class="elements-placeholder">
+                    <span>Console output will appear here</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Elements Panel -->
+              <div class="panel-section" id="elements-panel">
+                <div class="elements-placeholder"
+                  style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap: 10px;">
+                  <span>🔍</span>
+                  <span>Inspect Web Elements</span>
+                  <button id="btn-open-devtools" class="btn btn-primary btn-sm">Open Web Inspector</button>
+                </div>
               </div>
             </div>
           </div>
@@ -208,18 +452,85 @@
       <!-- Files View -->
       <div class="view" id="files-view">
         <div class="view-header">
-          <h2>File Manager</h2>
-          <div class="file-actions">
-            <button class="btn-secondary" id="select-folder">📁 Select Folder</button>
-            <button class="btn-secondary" id="new-file">📝 New File</button>
+          <div class="header-title">
+            <h2>File Manager</h2>
+            <p class="header-subtitle" id="current-path">Select a folder to browse</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn-secondary" id="select-folder">📁 Open Folder</button>
+            <button class="btn-secondary" id="new-folder">📂 New Folder</button>
+            <button class="btn-primary" id="new-file">📝 New File</button>
           </div>
         </div>
-        <div class="files-container">
-          <div class="file-tree" id="file-tree">
-            <div class="placeholder">Select a folder to browse files</div>
+        <div class="files-container" id="files-container">
+          <div class="files-sidebar">
+            <div class="file-favorites">
+              <h4>Favorites</h4>
+              <div class="favorite-item" data-path="/">💻 Macintosh HD</div>
+              <div class="favorite-item" data-path="~/Documents">📄 Documents</div>
+              <div class="favorite-item" data-path="~/Downloads">⬇️ Downloads</div>
+              <div class="favorite-item" data-path="~/Desktop">🖥️ Desktop</div>
+              <div class="favorite-item" data-path="~/Projects">📦 Projects</div>
+            </div>
+          </div>
+          <div class="files-main">
+            <div class="files-toolbar">
+              <div class="breadcrumb" id="breadcrumb"><span class="breadcrumb-item">Home</span></div>
+            </div>
+            <div class="file-tree" id="file-tree">
+              <div class="empty-state">
+                <span class="empty-icon">📁</span>
+                <p>No folder selected</p>
+                <p class="empty-hint">Click "Open Folder" or choose a favorite</p>
+                <button class="btn-primary" style="margin-top: 12px;"
+                  onclick="document.getElementById('select-folder').click()">Open Folder</button>
+              </div>
+            </div>
           </div>
           <div class="file-preview" id="file-preview">
-            <div class="placeholder">Select a file to preview</div>
+            <div class="empty-state">
+              <span class="empty-icon">👁️</span>
+              <p>Select a file to preview</p>
+            </div>
+          </div>
+          <!-- Drag-and-drop overlay -->
+          <div class="files-drop-overlay" id="files-drop-overlay">
+            <div class="files-drop-overlay-content">
+              <div class="drop-icon">📥</div>
+              <div class="drop-text">Drop files here</div>
+              <div class="drop-hint">Files will be added to the current folder</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Explorer View -->
+      <div class="view" id="memory-view">
+        <div class="view-header">
+          <h2>Memory Explorer</h2>
+          <p class="header-subtitle">Search through agent memory and past experiences</p>
+        </div>
+        <div class="memory-search-container">
+          <div class="memory-search">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="memory-search-input" placeholder="Search memories...">
+            <div class="search-loading" id="search-loading" style="display:none;">
+              <div class="loading-spinner small"></div>
+            </div>
+          </div>
+          <div class="memory-filters">
+            <button class="filter-chip active" data-filter="all">All</button>
+            <button class="filter-chip" data-filter="success">✓ Success</button>
+            <button class="filter-chip" data-filter="failed">✗ Failed</button>
+          </div>
+        </div>
+        <div class="memory-results" id="memory-results">
+          <div class="empty-state">
+            <span class="empty-icon">🧠</span>
+            <p>Search your agent's memory</p>
+            <p class="empty-hint">Try searching for past tasks or topics</p>
+            <button class="btn-primary" style="margin-top: 12px;"
+              onclick="document.getElementById('memory-search-input').focus()">Search Memory</button>
           </div>
         </div>
       </div>
@@ -230,124 +541,297 @@
           <h2>Settings</h2>
         </div>
         <div class="settings-container">
-          <div class="settings-section">
-            <h3>API Keys</h3>
-            <div class="setting-item">
-              <label>OpenAI API Key</label>
-              <input type="password" id="api-key-openai" placeholder="sk-...">
+          <!-- Tab Bar -->
+          <div class="settings-tabs">
+            <button class="settings-tab active" data-settings-tab="api-keys">API Keys</button>
+            <button class="settings-tab" data-settings-tab="models">Models</button>
+            <button class="settings-tab" data-settings-tab="browser-settings">Browser</button>
+            <button class="settings-tab" data-settings-tab="system">System</button>
+          </div>
+
+          <!-- ===== API Keys Tab ===== -->
+          <div class="settings-tab-panel active" id="panel-api-keys">
+            <!-- OpenAI -->
+            <div class="provider-section expanded" data-provider="openai">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🟢</span>
+                  <span class="provider-name">OpenAI</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-openai" placeholder="sk-..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-openai"
+                      title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="openai">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
             </div>
-            <div class="setting-item">
-              <label>Anthropic API Key</label>
-              <input type="password" id="api-key-anthropic" placeholder="sk-...">
+
+            <!-- Anthropic -->
+            <div class="provider-section" data-provider="anthropic">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🟠</span>
+                  <span class="provider-name">Anthropic</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-anthropic" placeholder="sk-ant-..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-anthropic"
+                      title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="anthropic">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
             </div>
-            <div class="setting-item">
-              <label>Google API Key</label>
-              <input type="password" id="api-key-google" placeholder="...">
+
+            <!-- Google -->
+            <div class="provider-section" data-provider="google">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">🔵</span>
+                  <span class="provider-name">Google</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>API Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="api-key-google" placeholder="AIza..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="api-key-google"
+                      title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <button class="test-connection-btn" data-provider="google">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
+            </div>
+
+            <!-- AWS Bedrock -->
+            <div class="provider-section" data-provider="bedrock">
+              <div class="provider-header">
+                <div class="provider-header-left">
+                  <span class="provider-icon">&#9729;&#65039;</span>
+                  <span class="provider-name">AWS Bedrock</span>
+                </div>
+                <span class="provider-chevron">&#9656;</span>
+              </div>
+              <div class="provider-body">
+                <div class="setting-row">
+                  <label>Access Key ID</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="aws-access-key-id" placeholder="AKIA..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="aws-access-key-id"
+                      title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label>Secret Access Key</label>
+                  <div class="password-input-wrapper">
+                    <input type="password" id="aws-secret-access-key" placeholder="Secret key..." autocomplete="off">
+                    <button class="toggle-visibility-btn" data-target="aws-secret-access-key"
+                      title="Show/Hide">&#128065;</button>
+                  </div>
+                </div>
+                <div class="setting-row">
+                  <label>Region</label>
+                  <select class="setting-select" id="aws-region">
+                    <option value="us-east-1">us-east-1 (N. Virginia)</option>
+                    <option value="us-west-2">us-west-2 (Oregon)</option>
+                    <option value="eu-west-1">eu-west-1 (Ireland)</option>
+                    <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+                  </select>
+                </div>
+                <div class="setting-row">
+                  <label>Model ID</label>
+                  <input type="text" class="setting-input" id="bedrock-model-id"
+                    placeholder="anthropic.claude-3-5-sonnet-20241022-v2:0">
+                </div>
+                <button class="test-connection-btn" data-provider="bedrock">
+                  <span class="conn-icon">&#9889;</span> Test Connection
+                </button>
+              </div>
             </div>
           </div>
-          
-          <div class="settings-section">
-            <h3>Models</h3>
-            <div class="setting-item">
-              <label>Chat Model</label>
-              <select id="chat-model">
-                <option value="gpt-4">GPT-4</option>
-                <option value="gpt-4o">GPT-4o</option>
-                <option value="claude-3-opus">Claude 3 Opus</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-              </select>
-            </div>
-            <div class="setting-item">
-              <label>Agent Model</label>
-              <select id="agent-model">
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-              </select>
-            </div>
-          </div>
-          
-          <div class="settings-section">
-            <h3>System</h3>
-            <div class="setting-item">
-              <label>Auto-start</label>
-              <input type="checkbox" id="setting-autostart">
-            </div>
-            <div class="setting-item">
-              <label>Menu Bar Icon</label>
-              <input type="checkbox" id="setting-menubar" checked>
-            </div>
-            <div class="setting-item">
-              <label>Notifications</label>
-              <input type="checkbox" id="setting-notifications" checked>
+
+          <!-- ===== Models Tab ===== -->
+          <div class="settings-tab-panel" id="panel-models">
+            <div class="settings-card">
+              <h3>Model Configuration</h3>
+              <div class="setting-row">
+                <label>Default Provider</label>
+                <select class="setting-select" id="settings-default-provider">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google</option>
+                  <option value="bedrock">AWS Bedrock</option>
+                </select>
+              </div>
+              <div class="setting-slider-row">
+                <div class="slider-header">
+                  <span class="label-title">Temperature</span>
+                  <span class="slider-value" id="temperature-value">0.3</span>
+                </div>
+                <input type="range" class="setting-slider" id="settings-temperature" min="0" max="1" step="0.1"
+                  value="0.3">
+                <div class="slider-desc">Controls randomness. Lower values make output more focused and deterministic.
+                </div>
+              </div>
             </div>
           </div>
+
+          <!-- ===== Browser Tab ===== -->
+          <div class="settings-tab-panel" id="panel-browser-settings">
+            <div class="settings-card">
+              <h3>Browser Configuration</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Headless Mode</span>
+                  <span class="label-desc">Run browser automation without visible window</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-headless">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-slider-row">
+                <div class="slider-header">
+                  <span class="label-title">Default Timeout</span>
+                  <span class="slider-value" id="timeout-value">30s</span>
+                </div>
+                <input type="range" class="setting-slider" id="settings-timeout" min="10" max="120" step="5" value="30">
+                <div class="slider-desc">Maximum wait time for browser operations (10-120 seconds)</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ===== System Tab ===== -->
+          <div class="settings-tab-panel" id="panel-system">
+            <div class="settings-card">
+              <h3>General</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Launch at Login</span>
+                  <span class="label-desc">Automatically start Agent7 when you log in</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-launch-login">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Show Notifications</span>
+                  <span class="label-desc">Display system notifications for task completions</span>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" id="settings-notifications" checked>
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h3>Data Management</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Export Settings</span>
+                  <span class="label-desc">Back up your configuration and API keys to a file</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-export-settings">Export...</button>
+              </div>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Import Settings</span>
+                  <span class="label-desc">Restore your configuration from a file</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-import-settings">Import...</button>
+              </div>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">System Logs</span>
+                  <span class="label-desc">Open the folder containing Agent7 diagnostic logs</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-open-logs">Open Folder</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h3>App Updates</h3>
+              <div class="setting-toggle-row">
+                <div class="setting-toggle-label">
+                  <span class="label-title">Software Update</span>
+                  <span class="label-desc" id="update-status-text">Check for the latest version of Agent7</span>
+                </div>
+                <button class="btn btn-secondary" id="btn-check-updates">Check for Updates</button>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h3>Keyboard Shortcuts</h3>
+              <div class="shortcuts-list" id="shortcuts-editor">
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Send Message</span>
+                  <input type="text" class="shortcut-input" id="shortcut-send-message" data-action="send-message"
+                    readonly placeholder="CmdOrCtrl+Enter">
+                  <button class="btn-icon reset-shortcut" data-target="shortcut-send-message"
+                    title="Reset to default">↺</button>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">New Task</span>
+                  <input type="text" class="shortcut-input" id="shortcut-new-task" data-action="new-task" readonly
+                    placeholder="CmdOrCtrl+N">
+                  <button class="btn-icon reset-shortcut" data-target="shortcut-new-task"
+                    title="Reset to default">↺</button>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Quick Task</span>
+                  <input type="text" class="shortcut-input" id="shortcut-quick-task" data-action="quick-task" readonly
+                    placeholder="CmdOrCtrl+Shift+K">
+                  <button class="btn-icon reset-shortcut" data-target="shortcut-quick-task"
+                    title="Reset to default">↺</button>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Screenshot</span>
+                  <input type="text" class="shortcut-input" id="shortcut-screenshot" data-action="screenshot" readonly
+                    placeholder="CmdOrCtrl+Shift+S">
+                  <button class="btn-icon reset-shortcut" data-target="shortcut-screenshot"
+                    title="Reset to default">↺</button>
+                </div>
+                <div class="shortcut-row">
+                  <span class="shortcut-action">Toggle Autonomous</span>
+                  <input type="text" class="shortcut-input" id="shortcut-toggle-autonomous"
+                    data-action="toggle-autonomous" readonly placeholder="CmdOrCtrl+Shift+A">
+                  <button class="btn-icon reset-shortcut" data-target="shortcut-toggle-autonomous"
+                    title="Reset to default">↺</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Modals -->
-  <div class="modal" id="agent-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Create New Agent</h3>
-        <button class="btn-icon close-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Agent Name</label>
-          <input type="text" id="agent-name" placeholder="e.g., Research Assistant">
-        </div>
-        <div class="form-group">
-          <label>Agent Type</label>
-          <select id="agent-type">
-            <option value="general">General Purpose</option>
-            <option value="research">Research</option>
-            <option value="coding">Coding</option>
-            <option value="browser">Browser</option>
-            <option value="file">File Manager</option>
-            <option value="custom">Custom</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="agent-description" rows="3" placeholder="What can this agent do?"></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary close-modal">Cancel</button>
-        <button class="btn-primary" id="save-agent">Create Agent</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="modal" id="workflow-modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Create Workflow</h3>
-        <button class="btn-icon close-modal">×</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>Workflow Name</label>
-          <input type="text" id="workflow-name" placeholder="e.g., Morning Report">
-        </div>
-        <div class="form-group">
-          <label>Trigger</label>
-          <select id="workflow-trigger">
-            <option value="manual">Manual</option>
-            <option value="schedule">Scheduled</option>
-            <option value="event">Event-based</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary close-modal">Cancel</button>
-        <button class="btn-primary" id="save-workflow">Create Workflow</button>
-      </div>
-    </div>
-  </div>
-
+  <script src="lib/state.js"></script>
+  <script src="lib/websocket.js"></script>
+  <script src="lib/toast.js"></script>
+  <script src="lib/markdown.js"></script>
   <script src="renderer.js"></script>
 </body>
+
 </html>

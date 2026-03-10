@@ -23,29 +23,54 @@
       "buildResources": "assets"
     },
     "files": [
+      "!build.log",
       "src/**/*",
       "assets/**/*",
-      "python-backend/**/*",
-      "node_modules/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules_old/**",
+      "!python-backend/.venv/**",
+      "!python-backend/__pycache__/**",
+      "!python-backend/.pytest_cache/**",
+      "!python-backend/tests/**"
+    ],
+    "extraResources": [
+      {
+        "from": "python-backend",
+        "to": "python-backend",
+        "filter": [
+          "**/*",
+          "!__pycache__/**",
+          "!.pytest_cache/**",
+          "!tests/**",
+          "!.venv/**",
+          "!.venv_broken/**"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         },
         {
           "target": "zip",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
-      "icon": "assets/icon.icns",
+      "icon": "assets/logo.png",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "assets/entitlements.plist",
-      "entitlementsInherit": "assets/entitlements.plist"
+      "entitlementsInherit": "assets/entitlements.plist",
+      "entitlementsLoginHelper": "assets/entitlements.plist"
     },
     "dmg": {
       "sign": false,
@@ -66,6 +91,7 @@
         "height": 380
       }
     },
+    "afterSign": "notarize.js",
     "publish": {
       "provider": "github",
       "owner": "Mirxa27",
@@ -75,16 +101,17 @@
   },
   "dependencies": {
     "axios": "^1.6.0",
-    "electron-store": "^8.1.0",
-    "node-notifier": "^10.0.1",
-    "electron-log": "^5.0.0",
-    "uuid": "^9.0.0",
     "chrono-node": "^2.7.0",
-    "fastest-levenshtein": "^1.0.16"
+    "electron-log": "^5.0.0",
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.8",
+    "fastest-levenshtein": "^1.0.16",
+    "node-notifier": "^10.0.1",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@electron/notarize": "^2.3.0",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
-    "electron-notarize": "^1.2.2"
+    "electron-builder": "^26.8.1"
   }
 }
